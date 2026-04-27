@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "name": "Lead",
+  "preamp_chain": [
+    {
+      "gain": 2.3,
+      "bias": 0.0,
+      "clipper_type": "ClassA",
+      "bypassed": false
+    },
+    {
+      "gain": 6.0,
+      "bias": 0.70000005,
+      "clipper_type": "ClassA",
+      "bypassed": false
+    }
+  ]
+}

@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "name": "Vintage Clean",
+  "amplifier": {
+    "schema_version": 1,
+    "name": "Vintage Clean Amp",
+    "input_filters": {
+      "hp_enabled": true,
+      "hp_cutoff": 117.0,
+      "lp_enabled": true,
+      "lp_cutoff": 7174.0
+    },
+    "amp_chain": [
+      {
+        "Compressor": {
+          "attack_ms": 1.0,
+          "release_ms": 100.0,
+          "threshold_db": -20.0,
+          "ratio": 4.0,
+          "makeup_db": 3.9000003,
+          "bypassed": false
+        }
+      },
+      {
+        "ToneStack": {
+          "model": "British",
+          "bass": 1.0500001,
+          "mid": 1.4,
+          "treble": 1.25,
+          "presence": 1.45,
+          "bypassed": false
+        }
+      },
+      {
+        "MultibandSaturator": {
+          "low_drive": 0.099999994,
+          "mid_drive": 0.17999999,
+          "high_drive": 0.11,
+          "low_level": 1.0,
+          "mid_level": 1.54,
+          "high_level": 1.0,
+          "low_freq": 325.0,
+          "high_freq": 2850.0,
+          "bypassed": false
+        }
+      },
+      {
+        "Level": {
+          "gain": 0.90000004,
+          "bypassed": false
+        }
+      },
+      {
+        "Eq": {
+          "gains": [
+            -8.6,
+            -7.0,
+            -3.3,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            2.8000002,
+            3.6000001,
+            1.6000001,
+            3.1000001,
+            3.2000003,
+            -0.29999983,
+            -4.9,
+            -2.9999998,
+            -4.2999997
+          ],
+          "bypassed": false
+        }
+      },
+      {
+        "Reverb": {
+          "room_size": 0.24,
+          "damping": 0.96,
+          "mix": 0.06,
+          "bypassed": false
+        }
+      },
+      {
+        "Delay": {
+          "delay_ms": 300.0,
+          "feedback": 0.3,
+          "mix": 0.26,
+          "bypassed": false
+        }
+      }
+    ]
+  },
+  "impulse_response": {
+    "ir_path": "res://assets/rustortion/demo_ir/science_g12h150_md421_brighter.wav",
+    "ir_gain": 0.26
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "name": "Crunch",
+  "preamp_chain": [
+    {
+      "gain": 6.0,
+      "bias": 0.0,
+      "clipper_type": "Medium",
+      "bypassed": false
+    }
+  ]
+}

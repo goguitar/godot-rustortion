@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "name": "Lead",
+  "amplifier": {
+    "schema_version": 1,
+    "name": "Lead Amp",
+    "input_filters": {
+      "hp_enabled": true,
+      "hp_cutoff": 187.0,
+      "lp_enabled": true,
+      "lp_cutoff": 7469.0
+    },
+    "amp_chain": [
+      {
+        "ToneStack": {
+          "model": "American",
+          "bass": 1.0,
+          "mid": 1.25,
+          "treble": 1.35,
+          "presence": 0.95,
+          "bypassed": false
+        }
+      },
+      {
+        "NoiseGate": {
+          "threshold_db": -20.0,
+          "ratio": 10.0,
+          "attack_ms": 1.4,
+          "hold_ms": 10.0,
+          "release_ms": 100.0,
+          "bypassed": false
+        }
+      },
+      {
+        "Compressor": {
+          "attack_ms": 1.0,
+          "release_ms": 80.0,
+          "threshold_db": -14.0,
+          "ratio": 4.0,
+          "makeup_db": 18.5,
+          "bypassed": false
+        }
+      },
+      {
+        "Level": {
+          "gain": 0.4,
+          "bypassed": false
+        }
+      }
+    ]
+  },
+  "impulse_response": {
+    "ir_path": "res://assets/rustortion/demo_ir/science_g12h150_sm57_brighter.wav",
+    "ir_gain": 0.17
+  }
+}

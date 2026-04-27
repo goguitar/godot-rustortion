@@ -1,0 +1,39 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="godot-rustortion-demo"
+config/description="Godot 4.5 demo using AudioEffectRustortion for live guitar input processing."
+run/main_scene="res://main.tscn"
+config/features=PackedStringArray("4.5")
+config/icon="res://icon.webp"
+
+[audio]
+
+driver/enable_input=true
+driver/mix_rate=48000
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/handheld/orientation=1
+
+[input_devices]
+
+pointing/emulate_touch_from_mouse=true
+
+[rendering]
+
+renderer/rendering_method="mobile"
+environment/defaults/default_clear_color=Color(0.0823529, 0.0862745, 0.101961, 1)

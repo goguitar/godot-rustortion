@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "name": "Warm Overdrive",
+  "preamp_chain": [
+    {
+      "gain": 1.1,
+      "bias": 0.0,
+      "clipper_type": "ClassA",
+      "bypassed": false
+    },
+    {
+      "gain": 1.2,
+      "bias": 0.0,
+      "clipper_type": "Soft",
+      "bypassed": false
+    }
+  ]
+}

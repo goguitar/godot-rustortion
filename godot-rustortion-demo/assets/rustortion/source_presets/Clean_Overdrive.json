@@ -1,0 +1,58 @@
+{
+  "name": "Clean Overdrive",
+  "description": null,
+  "author": null,
+  "stages": [
+    {
+      "Compressor": {
+        "attack_ms": 1.0,
+        "release_ms": 100.0,
+        "threshold_db": -20.0,
+        "ratio": 4.0,
+        "makeup_db": 3.9000003
+      }
+    },
+    {
+      "Preamp": {
+        "gain": 1.1,
+        "bias": 0.0,
+        "clipper_type": "ClassA"
+      }
+    },
+    {
+      "ToneStack": {
+        "model": "British",
+        "bass": 1.0500001,
+        "mid": 1.35,
+        "treble": 1.2,
+        "presence": 1.5500001
+      }
+    },
+    {
+      "Preamp": {
+        "gain": 1.2,
+        "bias": 0.0,
+        "clipper_type": "Soft"
+      }
+    },
+    {
+      "PowerAmp": {
+        "drive": 0.95,
+        "amp_type": "ClassAB",
+        "sag": 0.3
+      }
+    },
+    {
+      "Level": {
+        "gain": 1.0
+      }
+    }
+  ],
+  "ir_name": "Jesterdyne/AX1500g/4x12-classic.wav",
+  "input_filters": {
+    "hp_enabled": true,
+    "hp_cutoff": 197.0,
+    "lp_enabled": true,
+    "lp_cutoff": 7625.0
+  }
+}

@@ -1,0 +1,60 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux Debug
+            profile: debug
+            artifact_name: godot-rustortion-linux-debug
+          - name: Linux Release
+            profile: release
+            artifact_name: godot-rustortion-linux-release
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build extension
+        shell: bash
+        run: |
+          if [ "${{ matrix.profile }}" = "release" ]; then
+            cargo build --release
+          else
+            cargo build
+          fi
+
+      - name: Prepare artifact bundle
+        shell: bash
+        run: |
+          mkdir -p dist
+          if [ "${{ matrix.profile }}" = "release" ]; then
+            cp target/release/libgodot_rustortion.so dist/libgodot_rustortion.so
+          else
+            cp target/debug/libgodot_rustortion.so dist/libgodot_rustortion.so
+          fi
+          cp godot-rustortion.gdextension dist/godot-rustortion.gdextension
+          cp godot-rustortion-demo/godot-rustortion.gdextension dist/godot-rustortion-demo.gdextension
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: dist/

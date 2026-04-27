@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "name": "Distortion",
+  "preamp_chain": [
+    {
+      "gain": 3.5,
+      "bias": 0.05,
+      "clipper_type": "Triode",
+      "bypassed": false
+    },
+    {
+      "gain": 5.2,
+      "bias": 0.4,
+      "clipper_type": "Triode",
+      "bypassed": false
+    },
+    {
+      "gain": 4.2,
+      "bias": -0.1,
+      "clipper_type": "Triode",
+      "bypassed": false
+    },
+    {
+      "gain": 5.0,
+      "bias": 0.15,
+      "clipper_type": "Triode",
+      "bypassed": false
+    }
+  ]
+}

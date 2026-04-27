@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "name": "Modern Stack",
+  "amplifier": {
+    "schema_version": 1,
+    "name": "Modern Stack Amp",
+    "input_filters": {
+      "hp_enabled": true,
+      "hp_cutoff": 80.0,
+      "lp_enabled": true,
+      "lp_cutoff": 9000.0
+    },
+    "amp_chain": [
+      {
+        "NoiseGate": {
+          "threshold_db": -40.0,
+          "ratio": 10.0,
+          "attack_ms": 0.5,
+          "hold_ms": 80.0,
+          "release_ms": 150.0,
+          "bypassed": false
+        }
+      },
+      {
+        "ToneStack": {
+          "model": "American",
+          "bass": 0.90000004,
+          "mid": 1.0,
+          "treble": 1.0,
+          "presence": 0.65000004,
+          "bypassed": false
+        }
+      },
+      {
+        "PowerAmp": {
+          "drive": 0.15,
+          "amp_type": "ClassAB",
+          "sag": 0.3,
+          "sag_release": 120.0,
+          "bypassed": false
+        }
+      },
+      {
+        "MultibandSaturator": {
+          "low_drive": 0.06,
+          "mid_drive": 0.16,
+          "high_drive": 0.099999994,
+          "low_level": 0.72999996,
+          "mid_level": 0.87,
+          "high_level": 0.84,
+          "low_freq": 347.0,
+          "high_freq": 2810.0,
+          "bypassed": false
+        }
+      },
+      {
+        "Eq": {
+          "gains": [
+            -7.7999997,
+            -5.9,
+            -3.1999998,
+            -3.4999998,
+            -1.9999999,
+            -1.0999998,
+            -0.09999982,
+            0.5000002,
+            0.0,
+            -1.5999999,
+            1.7881393e-07,
+            -0.79999983,
+            0.0,
+            -1.5999999,
+            -2.6999998,
+            -3.4999998
+          ],
+          "bypassed": false
+        }
+      },
+      {
+        "Reverb": {
+          "room_size": 0.22,
+          "damping": 0.72999996,
+          "mix": 0.2,
+          "bypassed": false
+        }
+      }
+    ]
+  },
+  "impulse_response": {
+    "ir_path": "res://assets/rustortion/demo_ir/science_g12h150_sm57_darker.wav",
+    "ir_gain": 0.21
+  }
+}

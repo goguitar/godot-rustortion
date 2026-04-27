@@ -1,0 +1,157 @@
+[gd_scene load_steps=4 format=3 uid="uid://dudfqxbbnylvy"]
+
+[ext_resource type="Script" uid="uid://d3aksr5nkl7w3" path="res://main.gd" id="1"]
+[ext_resource type="Script" uid="uid://m4887qnvmu14" path="res://spectrum_view.gd" id="2"]
+
+[sub_resource type="AudioStreamMicrophone" id="AudioStreamMicrophone_1"]
+
+[node name="Main" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.0470588, 0.0509804, 0.0627451, 1)
+
+[node name="MarginContainer" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 18.0
+offset_top = 18.0
+offset_right = -18.0
+offset_bottom = -18.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="RootLayout" type="HBoxContainer" parent="MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 18
+
+[node name="AmpPanel" type="PanelContainer" parent="MarginContainer/RootLayout"]
+custom_minimum_size = Vector2(260, 0)
+layout_mode = 2
+
+[node name="AmpMargin" type="MarginContainer" parent="MarginContainer/RootLayout/AmpPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="AmpVBox" type="VBoxContainer" parent="MarginContainer/RootLayout/AmpPanel/AmpMargin"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="AmpTitle" type="Label" parent="MarginContainer/RootLayout/AmpPanel/AmpMargin/AmpVBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Cabinets"
+
+[node name="AmpHelp" type="Label" parent="MarginContainer/RootLayout/AmpPanel/AmpMargin/AmpVBox"]
+layout_mode = 2
+text = "Select the amp chain and cabinet IR stored in the game project assets."
+autowrap_mode = 3
+
+[node name="CabinetList" type="ItemList" parent="MarginContainer/RootLayout/AmpPanel/AmpMargin/AmpVBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 520)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="CenterPanel" type="PanelContainer" parent="MarginContainer/RootLayout"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="CenterMargin" type="MarginContainer" parent="MarginContainer/RootLayout/CenterPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 14
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 14
+
+[node name="CenterVBox" type="VBoxContainer" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 12
+
+[node name="Title" type="Label" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 28
+text = "Live Guitar Input Spectrum"
+horizontal_alignment = 1
+
+[node name="Subtitle" type="Label" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox"]
+layout_mode = 2
+text = "Plug the guitar interface or real tone cable into your input device. The microphone stream is routed through the GuitarPlayer bus and processed by AudioEffectRustortion."
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="SpectrumArea" type="Control" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 420)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+script = ExtResource("2")
+
+[node name="StatusLabel" type="Label" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Waiting for audio input..."
+autowrap_mode = 3
+
+[node name="TonePanel" type="PanelContainer" parent="MarginContainer/RootLayout"]
+custom_minimum_size = Vector2(260, 0)
+layout_mode = 2
+
+[node name="ToneMargin" type="MarginContainer" parent="MarginContainer/RootLayout/TonePanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="ToneVBox" type="VBoxContainer" parent="MarginContainer/RootLayout/TonePanel/ToneMargin"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="ToneTitle" type="Label" parent="MarginContainer/RootLayout/TonePanel/ToneMargin/ToneVBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Tones"
+
+[node name="ToneHelp" type="Label" parent="MarginContainer/RootLayout/TonePanel/ToneMargin/ToneVBox"]
+layout_mode = 2
+text = "TonePreset v1 only changes the preamp chain. Try clean, crunch, distortion, fuzz, lead, and djent variants."
+autowrap_mode = 3
+
+[node name="TonePresetList" type="ItemList" parent="MarginContainer/RootLayout/TonePanel/ToneMargin/ToneVBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 520)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="GuitarInputPlayer" type="AudioStreamPlayer" parent="."]
+unique_name_in_owner = true
+stream = SubResource("AudioStreamMicrophone_1")
+bus = &"GuitarPlayer"
+
+[connection signal="item_selected" from="MarginContainer/RootLayout/AmpPanel/AmpMargin/AmpVBox/CabinetList" to="." method="_on_cabinet_list_item_selected"]
+[connection signal="item_selected" from="MarginContainer/RootLayout/TonePanel/ToneMargin/ToneVBox/TonePresetList" to="." method="_on_tone_list_item_selected"]
