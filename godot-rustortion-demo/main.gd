@@ -8,6 +8,7 @@ const SOURCE_PRESET_DIR := "res://assets/rustortion/source_presets"
 const IR_BASE_DIR := "res://assets/rustortion/impulse_responses"
 const PLAYBACK_SOURCE_DIR := "res://assets/rustortion/input_loops/rock_guitar"
 const MIN_METER_DB := -60.0
+const PEAK_HOLD_DECAY := 0.02
 
 const EQ_BAND_FREQS := [
 	25.0, 40.0, 63.0, 100.0, 160.0, 250.0, 400.0, 630.0,
@@ -25,6 +26,8 @@ var selected_playback_index := 0
 
 var input_meter_db := MIN_METER_DB
 var output_meter_db := MIN_METER_DB
+var input_peak_norm := 0.0
+var output_peak_norm := 0.0
 
 @onready var rig_list: ItemList = %RigList
 @onready var status_label: Label = %StatusLabel
@@ -32,8 +35,12 @@ var output_meter_db := MIN_METER_DB
 @onready var playback_clip_label: Label = %PlaybackClipLabel
 @onready var current_input_label: Label = %CurrentInputLabel
 @onready var playback_input_player: AudioStreamPlayer = %PlaybackInputPlayer
-@onready var input_vu_bar: ProgressBar = %InputVuBar
-@onready var output_vu_bar: ProgressBar = %OutputVuBar
+@onready var input_vu_track: Control = %InputVuTrack
+@onready var output_vu_track: Control = %OutputVuTrack
+@onready var input_vu_fill: TextureRect = %InputVuFill
+@onready var output_vu_fill: TextureRect = %OutputVuFill
+@onready var input_vu_peak: ColorRect = %InputVuPeak
+@onready var output_vu_peak: ColorRect = %OutputVuPeak
 @onready var input_vu_value_label: Label = %InputVuValueLabel
 @onready var output_vu_value_label: Label = %OutputVuValueLabel
 
@@ -454,10 +461,27 @@ func update_vu_meters() -> void:
 	var in_norm := _db_to_meter_norm(input_meter_db)
 	var out_norm := _db_to_meter_norm(output_meter_db)
 
-	input_vu_bar.value = in_norm * 100.0
-	output_vu_bar.value = out_norm * 100.0
+	input_peak_norm = maxf(in_norm, input_peak_norm - PEAK_HOLD_DECAY)
+	output_peak_norm = maxf(out_norm, output_peak_norm - PEAK_HOLD_DECAY)
+
+	_update_meter_visuals(input_vu_track, input_vu_fill, input_vu_peak, in_norm, input_peak_norm)
+	_update_meter_visuals(output_vu_track, output_vu_fill, output_vu_peak, out_norm, output_peak_norm)
+
 	input_vu_value_label.text = "%.1f dB" % input_meter_db
 	output_vu_value_label.text = "%.1f dB" % output_meter_db
+
+
+func _update_meter_visuals(
+	track: Control,
+	fill: TextureRect,
+	peak: ColorRect,
+	norm: float,
+	peak_norm: float,
+) -> void:
+	var w := maxf(track.size.x, 1.0)
+	fill.size.x = maxf(1.0, w * norm)
+	var peak_x := clampf(w * peak_norm - peak.size.x * 0.5, 0.0, maxf(0.0, w - peak.size.x))
+	peak.position.x = peak_x
 
 
 func _smooth_meter_db(current_db: float, target_db: float) -> float:

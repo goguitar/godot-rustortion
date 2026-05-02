@@ -1,6 +1,8 @@
-[gd_scene load_steps=2 format=3 uid="uid://dudfqxbbnylvy"]
+[gd_scene load_steps=4 format=3 uid="uid://dudfqxbbnylvy"]
 
 [ext_resource type="Script" uid="uid://d3aksr5nkl7w3" path="res://main.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/ui/nam/MeterBackground.png" id="2"]
+[ext_resource type="Texture2D" path="res://assets/ui/nam/InputLevelBackground.png" id="3"]
 
 [node name="Main" type="Control"]
 layout_mode = 3
@@ -145,11 +147,54 @@ custom_minimum_size = Vector2(90, 0)
 layout_mode = 2
 text = "Input VU"
 
-[node name="InputVuBar" type="ProgressBar" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox/InputVuRow"]
+[node name="InputVuShell" type="TextureRect" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox/InputVuRow"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-show_percentage = false
+texture = ExtResource("2")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="InputVuTrack" type="Control" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox/InputVuRow/InputVuShell"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = 8.0
+offset_right = -10.0
+offset_bottom = -8.0
+grow_horizontal = 2
+grow_vertical = 2
+clip_contents = true
+
+[node name="InputVuFill" type="TextureRect" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox/InputVuRow/InputVuShell/InputVuTrack"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 6
+anchor_right = 0.0
+anchor_bottom = 1.0
+offset_right = 1.0
+grow_vertical = 2
+texture = ExtResource("3")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="InputVuPeak" type="ColorRect" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox/InputVuRow/InputVuShell/InputVuTrack"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 0.0
+anchor_bottom = 1.0
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 2.0
+offset_bottom = 0.0
+grow_vertical = 2
+color = Color(0.988235, 0.952941, 0.729412, 1)
 
 [node name="InputVuValueLabel" type="Label" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox/InputVuRow"]
 unique_name_in_owner = true
@@ -167,11 +212,54 @@ custom_minimum_size = Vector2(90, 0)
 layout_mode = 2
 text = "Output VU"
 
-[node name="OutputVuBar" type="ProgressBar" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox/OutputVuRow"]
+[node name="OutputVuShell" type="TextureRect" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox/OutputVuRow"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-show_percentage = false
+texture = ExtResource("2")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="OutputVuTrack" type="Control" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox/OutputVuRow/OutputVuShell"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = 8.0
+offset_right = -10.0
+offset_bottom = -8.0
+grow_horizontal = 2
+grow_vertical = 2
+clip_contents = true
+
+[node name="OutputVuFill" type="TextureRect" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox/OutputVuRow/OutputVuShell/OutputVuTrack"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 6
+anchor_right = 0.0
+anchor_bottom = 1.0
+offset_right = 1.0
+grow_vertical = 2
+texture = ExtResource("3")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="OutputVuPeak" type="ColorRect" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox/OutputVuRow/OutputVuShell/OutputVuTrack"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 0.0
+anchor_bottom = 1.0
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 2.0
+offset_bottom = 0.0
+grow_vertical = 2
+color = Color(0.988235, 0.952941, 0.729412, 1)
 
 [node name="OutputVuValueLabel" type="Label" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox/OutputVuRow"]
 unique_name_in_owner = true
