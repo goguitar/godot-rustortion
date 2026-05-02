@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "name": "Marshall DSL100H",
+  "preamp_chain": [
+    {
+      "gain": 2.2,
+      "bias": 0.0,
+      "clipper_type": "ClassA",
+      "bypassed": false
+    },
+    {
+      "gain": 4.8,
+      "bias": 0.32,
+      "clipper_type": "ClassA",
+      "bypassed": false
+    }
+  ]
+}

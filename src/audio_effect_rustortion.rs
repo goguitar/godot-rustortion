@@ -25,6 +25,7 @@ static PREWARM_CLIPPER_TABLES: Once = Once::new();
 const DEFAULT_BUFFER_FRAMES: usize = 512;
 const MAX_IR_MS: f32 = 35.0;
 const PRESET_CROSSFADE_MS: f32 = 40.0;
+const DEFAULT_OVERSAMPLE_FACTOR: f64 = 8.0;
 
 struct SharedRuntimeState {
     current: ArcSwap<RuntimeConfig>,
@@ -100,7 +101,7 @@ struct ChannelRuntime {
 impl ChannelRuntime {
     fn new(sample_rate: f32, buffer_frames: usize) -> Result<Self> {
         let (engine, handle, rt_drop_rx) =
-            Engine::new_for_plugin(sample_rate as usize, buffer_frames, None, 1.0)?;
+            Engine::new_for_plugin(sample_rate as usize, buffer_frames, None, DEFAULT_OVERSAMPLE_FACTOR)?;
 
         Ok(Self {
             engine,

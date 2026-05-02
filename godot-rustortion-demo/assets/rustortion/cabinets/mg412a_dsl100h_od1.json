@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "name": "Marshall MG412A + DSL100H OD1",
+  "amplifier": {
+    "schema_version": 1,
+    "name": "Marshall DSL100H OD1",
+    "input_filters": {
+      "hp_enabled": true,
+      "hp_cutoff": 96.0,
+      "lp_enabled": true,
+      "lp_cutoff": 6400.0
+    },
+    "amp_chain": [
+      {
+        "NoiseGate": {
+          "threshold_db": -60.0,
+          "ratio": 2.0,
+          "attack_ms": 3.0,
+          "hold_ms": 80.0,
+          "release_ms": 220.0,
+          "bypassed": false
+        }
+      },
+      {
+        "Compressor": {
+          "attack_ms": 2.5,
+          "release_ms": 120.0,
+          "threshold_db": -22.0,
+          "ratio": 2.0,
+          "makeup_db": 1.0,
+          "bypassed": false
+        }
+      },
+      {
+        "ToneStack": {
+          "model": "British",
+          "bass": 0.88,
+          "mid": 1.22,
+          "treble": 1.12,
+          "presence": 1.02,
+          "bypassed": false
+        }
+      },
+      {
+        "PowerAmp": {
+          "drive": 0.38,
+          "amp_type": "ClassAB",
+          "sag": 0.2,
+          "sag_release": 95.0,
+          "bypassed": false
+        }
+      },
+      {
+        "Eq": {
+          "gains": [
+            -6.0,
+            -5.0,
+            -2.5,
+            0.6,
+            0.4,
+            -0.8,
+            0.2,
+            0.9,
+            1.1,
+            -1.5,
+            -3.0,
+            -4.8,
+            -2.8,
+            -5.2,
+            -7.5,
+            -8.5
+          ],
+          "bypassed": false
+        }
+      },
+      {
+        "Compressor": {
+          "attack_ms": 0.3,
+          "release_ms": 70.0,
+          "threshold_db": -10.0,
+          "ratio": 20.0,
+          "makeup_db": 0.0,
+          "bypassed": false
+        }
+      },
+      {
+        "Level": {
+          "gain": 0.2,
+          "bypassed": false
+        }
+      }
+    ]
+  },
+  "impulse_response": {
+    "ir_path": "res://assets/rustortion/impulse_responses/Marshall/MG412A/mg412a_full.wav",
+    "ir_gain": 0.12
+  }
+}

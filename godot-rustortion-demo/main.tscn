@@ -1,9 +1,6 @@
-[gd_scene load_steps=4 format=3 uid="uid://dudfqxbbnylvy"]
+[gd_scene load_steps=2 format=3 uid="uid://dudfqxbbnylvy"]
 
 [ext_resource type="Script" uid="uid://d3aksr5nkl7w3" path="res://main.gd" id="1"]
-[ext_resource type="Script" uid="uid://m4887qnvmu14" path="res://spectrum_view.gd" id="2"]
-
-[sub_resource type="AudioStreamMicrophone" id="AudioStreamMicrophone_1"]
 
 [node name="Main" type="Control"]
 layout_mode = 3
@@ -43,34 +40,34 @@ theme_override_constants/margin_bottom = 12
 layout_mode = 2
 theme_override_constants/separation = 18
 
-[node name="AmpPanel" type="PanelContainer" parent="MarginContainer/RootLayout"]
-custom_minimum_size = Vector2(260, 0)
+[node name="RigPanel" type="PanelContainer" parent="MarginContainer/RootLayout"]
+custom_minimum_size = Vector2(300, 0)
 layout_mode = 2
 
-[node name="AmpMargin" type="MarginContainer" parent="MarginContainer/RootLayout/AmpPanel"]
+[node name="RigMargin" type="MarginContainer" parent="MarginContainer/RootLayout/RigPanel"]
 layout_mode = 2
 theme_override_constants/margin_left = 12
 theme_override_constants/margin_top = 12
 theme_override_constants/margin_right = 12
 theme_override_constants/margin_bottom = 12
 
-[node name="AmpVBox" type="VBoxContainer" parent="MarginContainer/RootLayout/AmpPanel/AmpMargin"]
+[node name="RigVBox" type="VBoxContainer" parent="MarginContainer/RootLayout/RigPanel/RigMargin"]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="AmpTitle" type="Label" parent="MarginContainer/RootLayout/AmpPanel/AmpMargin/AmpVBox"]
+[node name="RigTitle" type="Label" parent="MarginContainer/RootLayout/RigPanel/RigMargin/RigVBox"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 22
-text = "Cabinets"
+text = "Rigs"
 
-[node name="AmpHelp" type="Label" parent="MarginContainer/RootLayout/AmpPanel/AmpMargin/AmpVBox"]
+[node name="RigHelp" type="Label" parent="MarginContainer/RootLayout/RigPanel/RigMargin/RigVBox"]
 layout_mode = 2
-text = "Select the amp chain and cabinet IR stored in the game project assets."
+text = "Unified GearList rigs (StudioEQ + Marshall DSL100H + GB412 cab)."
 autowrap_mode = 3
 
-[node name="CabinetList" type="ItemList" parent="MarginContainer/RootLayout/AmpPanel/AmpMargin/AmpVBox"]
+[node name="RigList" type="ItemList" parent="MarginContainer/RootLayout/RigPanel/RigMargin/RigVBox"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 520)
+custom_minimum_size = Vector2(0, 560)
 layout_mode = 2
 size_flags_vertical = 3
 
@@ -94,64 +91,105 @@ theme_override_constants/separation = 12
 [node name="Title" type="Label" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 28
-text = "Live Guitar Input Spectrum"
+text = "Guitar Dataset Playback"
 horizontal_alignment = 1
 
 [node name="Subtitle" type="Label" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox"]
 layout_mode = 2
-text = "Plug the guitar interface or real tone cable into your input device. The microphone stream is routed through the GuitarPlayer bus and processed by AudioEffectRustortion."
+text = "Playback-only demo with pre/post Rustortion VU metering."
 horizontal_alignment = 1
 autowrap_mode = 3
 
-[node name="SpectrumArea" type="Control" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox"]
+[node name="PlaybackClipRow" type="HBoxContainer" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="PlaybackClipLabel" type="Label" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/PlaybackClipRow"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 420)
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+text = "Playback Clip"
+
+[node name="PlaybackClipOption" type="OptionButton" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/PlaybackClipRow"]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-size_flags_vertical = 3
-script = ExtResource("2")
+
+[node name="CurrentInputLabel" type="Label" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Current Input: Guitar dataset playback"
+autowrap_mode = 3
+
+[node name="MetersPanel" type="PanelContainer" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="MetersMargin" type="MarginContainer" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="MetersVBox" type="VBoxContainer" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="InputVuRow" type="HBoxContainer" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="InputVuLabel" type="Label" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox/InputVuRow"]
+custom_minimum_size = Vector2(90, 0)
+layout_mode = 2
+text = "Input VU"
+
+[node name="InputVuBar" type="ProgressBar" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox/InputVuRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+show_percentage = false
+
+[node name="InputVuValueLabel" type="Label" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox/InputVuRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(80, 0)
+layout_mode = 2
+text = "-60.0 dB"
+horizontal_alignment = 2
+
+[node name="OutputVuRow" type="HBoxContainer" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="OutputVuLabel" type="Label" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox/OutputVuRow"]
+custom_minimum_size = Vector2(90, 0)
+layout_mode = 2
+text = "Output VU"
+
+[node name="OutputVuBar" type="ProgressBar" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox/OutputVuRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+show_percentage = false
+
+[node name="OutputVuValueLabel" type="Label" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox/OutputVuRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(80, 0)
+layout_mode = 2
+text = "-60.0 dB"
+horizontal_alignment = 2
 
 [node name="StatusLabel" type="Label" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Waiting for audio input..."
+text = "Waiting for playback..."
 autowrap_mode = 3
 
-[node name="TonePanel" type="PanelContainer" parent="MarginContainer/RootLayout"]
-custom_minimum_size = Vector2(260, 0)
-layout_mode = 2
-
-[node name="ToneMargin" type="MarginContainer" parent="MarginContainer/RootLayout/TonePanel"]
-layout_mode = 2
-theme_override_constants/margin_left = 12
-theme_override_constants/margin_top = 12
-theme_override_constants/margin_right = 12
-theme_override_constants/margin_bottom = 12
-
-[node name="ToneVBox" type="VBoxContainer" parent="MarginContainer/RootLayout/TonePanel/ToneMargin"]
-layout_mode = 2
-theme_override_constants/separation = 8
-
-[node name="ToneTitle" type="Label" parent="MarginContainer/RootLayout/TonePanel/ToneMargin/ToneVBox"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 22
-text = "Tones"
-
-[node name="ToneHelp" type="Label" parent="MarginContainer/RootLayout/TonePanel/ToneMargin/ToneVBox"]
-layout_mode = 2
-text = "TonePreset v1 only changes the preamp chain. Try clean, crunch, distortion, fuzz, lead, and djent variants."
-autowrap_mode = 3
-
-[node name="TonePresetList" type="ItemList" parent="MarginContainer/RootLayout/TonePanel/ToneMargin/ToneVBox"]
+[node name="PlaybackInputPlayer" type="AudioStreamPlayer" parent="."]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 520)
-layout_mode = 2
-size_flags_vertical = 3
+bus = &"GuitarPlay"
 
-[node name="GuitarInputPlayer" type="AudioStreamPlayer" parent="."]
-unique_name_in_owner = true
-stream = SubResource("AudioStreamMicrophone_1")
-bus = &"GuitarPlayer"
-
-[connection signal="item_selected" from="MarginContainer/RootLayout/AmpPanel/AmpMargin/AmpVBox/CabinetList" to="." method="_on_cabinet_list_item_selected"]
-[connection signal="item_selected" from="MarginContainer/RootLayout/TonePanel/ToneMargin/ToneVBox/TonePresetList" to="." method="_on_tone_list_item_selected"]
+[connection signal="item_selected" from="MarginContainer/RootLayout/RigPanel/RigMargin/RigVBox/RigList" to="." method="_on_rig_list_item_selected"]
+[connection signal="item_selected" from="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/PlaybackClipRow/PlaybackClipOption" to="." method="_on_playback_clip_option_item_selected"]
+[connection signal="finished" from="PlaybackInputPlayer" to="." method="_on_playback_input_player_finished"]

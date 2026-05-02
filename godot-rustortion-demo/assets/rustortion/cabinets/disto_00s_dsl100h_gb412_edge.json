@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "name": "Disto_00s DSL100H + GB412 Edge",
+  "amplifier": {
+    "schema_version": 1,
+    "name": "Marshall DSL100H (Disto_00s)",
+    "input_filters": {
+      "hp_enabled": true,
+      "hp_cutoff": 120.0,
+      "lp_enabled": true,
+      "lp_cutoff": 6800.0
+    },
+    "amp_chain": [
+      {
+        "Level": {
+          "gain": 0.68,
+          "bypassed": false
+        }
+      },
+      {
+        "Compressor": {
+          "attack_ms": 0.6,
+          "release_ms": 70.0,
+          "threshold_db": -14.0,
+          "ratio": 5.0,
+          "makeup_db": 0.0,
+          "bypassed": false
+        }
+      },
+      {
+        "NoiseGate": {
+          "threshold_db": -58.0,
+          "ratio": 2.0,
+          "attack_ms": 2.0,
+          "hold_ms": 80.0,
+          "release_ms": 220.0,
+          "bypassed": false
+        }
+      },
+      {
+        "ToneStack": {
+          "model": "British",
+          "bass": 1.76,
+          "mid": 1.56,
+          "treble": 1.98,
+          "presence": 0.2,
+          "bypassed": false
+        }
+      },
+      {
+        "PowerAmp": {
+          "drive": 0.08,
+          "amp_type": "ClassAB",
+          "sag": 0.24,
+          "sag_release": 105.0,
+          "bypassed": false
+        }
+      },
+      {
+        "Eq": {
+          "gains": [
+            0.0,
+            0.0,
+            0.0,
+            -1.5,
+            -2.5,
+            -2.0,
+            -0.4,
+            0.4,
+            0.8,
+            1.0,
+            0.4,
+            0.0,
+            0.0,
+            -0.5,
+            -1.0,
+            -1.0
+          ],
+          "bypassed": false
+        }
+      },
+      {
+        "Level": {
+          "gain": 0.2,
+          "bypassed": false
+        }
+      }
+    ]
+  },
+  "impulse_response": {
+    "ir_path": "res://assets/rustortion/impulse_responses/Science Amplification/4x12/G12H-75/SM57 Brighter.wav",
+    "ir_gain": 0.08
+  }
+}

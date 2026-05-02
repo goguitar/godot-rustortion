@@ -7,8 +7,8 @@ use serde::Deserialize;
 pub struct TonePresetV1 {
     #[serde(default = "default_schema_version")]
     pub schema_version: u32,
-    #[serde(default)]
-    pub name: String,
+    #[serde(default, rename = "name")]
+    pub _name: String,
     pub preamp_chain: Vec<PreampConfig>,
 }
 
@@ -16,8 +16,8 @@ pub struct TonePresetV1 {
 pub struct AmplifierPresetV1 {
     #[serde(default = "default_schema_version")]
     pub schema_version: u32,
-    #[serde(default)]
-    pub name: String,
+    #[serde(default, rename = "name")]
+    pub _name: String,
     #[serde(default)]
     pub input_filters: InputFilterConfig,
     #[serde(default)]

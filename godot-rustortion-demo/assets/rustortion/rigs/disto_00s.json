@@ -1,0 +1,40 @@
+{
+  "Name": "Disto_00s",
+  "IsCustom": true,
+  "Key": "Disto_00s",
+  "GearList": {
+    "Rack1": {
+      "Type": "Racks",
+      "Key": "Rack_StudioEQ",
+      "KnobValues": {
+        "Rack_StudioEQ_BassFreq": 485.0,
+        "Rack_StudioEQ_HiMidFreq": 1.2,
+        "Rack_StudioEQ_TrebleFreq": 6.6,
+        "Rack_StudioEQ_LoMidFreq": 140.0,
+        "Rack_StudioEQ_Treble": 0.0,
+        "Rack_StudioEQ_LoMidQ": 1.0,
+        "Rack_StudioEQ_Bass": 1.0,
+        "Rack_StudioEQ_HiMid": 1.0,
+        "Rack_StudioEQ_LoMid": -2.5,
+        "Rack_StudioEQ_HiMidQ": 1.0
+      }
+    },
+    "Amp": {
+      "Type": "Amps",
+      "Key": "Amp_MarshallDSL100H",
+      "KnobValues": {
+        "Amp_MarshallDSL100H_Mid": 78.0,
+        "Amp_MarshallDSL100H_Pres": 4.0,
+        "Amp_MarshallDSL100H_Res": 55.0,
+        "Amp_MarshallDSL100H_Bass": 88.0,
+        "Amp_MarshallDSL100H_Treble": 99.0,
+        "Amp_MarshallDSL100H_Gain": 77.0
+      }
+    },
+    "Cabinet": {
+      "Type": "Cabinets",
+      "Key": "Cab_GB412CMKIII_57_Edge",
+      "KnobValues": {}
+    }
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "name": "Marshall MG412A + DSL100H",
+  "amplifier": {
+    "schema_version": 1,
+    "name": "Marshall DSL100H",
+    "input_filters": {
+      "hp_enabled": true,
+      "hp_cutoff": 95.0,
+      "lp_enabled": true,
+      "lp_cutoff": 7800.0
+    },
+    "amp_chain": [
+      {
+        "NoiseGate": {
+          "threshold_db": -44.0,
+          "ratio": 5.5,
+          "attack_ms": 1.2,
+          "hold_ms": 50.0,
+          "release_ms": 160.0,
+          "bypassed": false
+        }
+      },
+      {
+        "Compressor": {
+          "attack_ms": 2.5,
+          "release_ms": 120.0,
+          "threshold_db": -20.0,
+          "ratio": 2.8,
+          "makeup_db": 4.0,
+          "bypassed": false
+        }
+      },
+      {
+        "ToneStack": {
+          "model": "British",
+          "bass": 0.62,
+          "mid": 0.78,
+          "treble": 0.7,
+          "presence": 0.75,
+          "bypassed": false
+        }
+      },
+      {
+        "PowerAmp": {
+          "drive": 0.16,
+          "amp_type": "ClassAB",
+          "sag": 0.3,
+          "sag_release": 110.0,
+          "bypassed": false
+        }
+      },
+      {
+        "Level": {
+          "gain": 0.58,
+          "bypassed": false
+        }
+      }
+    ]
+  },
+  "impulse_response": {
+    "ir_path": "res://assets/rustortion/impulse_responses/Marshall/MG412A/mg412a_full.wav",
+    "ir_gain": 0.12
+  }
+}
