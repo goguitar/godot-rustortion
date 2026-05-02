@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "name": "Orange PPC212 + OR50",
+  "amplifier": {
+    "schema_version": 1,
+    "name": "Orange OR50",
+    "input_filters": {
+      "hp_enabled": true,
+      "hp_cutoff": 90.0,
+      "lp_enabled": true,
+      "lp_cutoff": 7600.0
+    },
+    "amp_chain": [
+      {
+        "NoiseGate": {
+          "threshold_db": -46.0,
+          "ratio": 4.8,
+          "attack_ms": 1.4,
+          "hold_ms": 40.0,
+          "release_ms": 160.0,
+          "bypassed": false
+        }
+      },
+      {
+        "Compressor": {
+          "attack_ms": 3.0,
+          "release_ms": 130.0,
+          "threshold_db": -21.0,
+          "ratio": 2.2,
+          "makeup_db": 3.0,
+          "bypassed": false
+        }
+      },
+      {
+        "ToneStack": {
+          "model": "British",
+          "bass": 0.7,
+          "mid": 0.74,
+          "treble": 0.63,
+          "presence": 0.6,
+          "bypassed": false
+        }
+      },
+      {
+        "PowerAmp": {
+          "drive": 0.14,
+          "amp_type": "ClassAB",
+          "sag": 0.35,
+          "sag_release": 120.0,
+          "bypassed": false
+        }
+      },
+      {
+        "Level": {
+          "gain": 0.62,
+          "bypassed": false
+        }
+      }
+    ]
+  },
+  "impulse_response": {
+    "ir_path": "res://assets/rustortion/impulse_responses/Orange/PPC212/ppc212_full.wav",
+    "ir_gain": 0.13
+  }
+}

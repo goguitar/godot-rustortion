@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "name": "Rocksmith GB412CMKIII 57 Edge",
+  "amplifier": {
+    "schema_version": 1,
+    "name": "Rocksmith DSL100H Amp",
+    "input_filters": {
+      "hp_enabled": true,
+      "hp_cutoff": 120.0,
+      "lp_enabled": true,
+      "lp_cutoff": 6800.0
+    },
+    "amp_chain": [
+      {
+        "Level": {
+          "gain": 0.72,
+          "bypassed": false
+        }
+      },
+      {
+        "Compressor": {
+          "attack_ms": 0.4,
+          "release_ms": 60.0,
+          "threshold_db": -12.0,
+          "ratio": 6.0,
+          "makeup_db": 0.0,
+          "bypassed": false
+        }
+      },
+      {
+        "NoiseGate": {
+          "threshold_db": -60.0,
+          "ratio": 2.0,
+          "attack_ms": 3.0,
+          "hold_ms": 80.0,
+          "release_ms": 240.0,
+          "bypassed": true
+        }
+      },
+      {
+        "ToneStack": {
+          "model": "British",
+          "bass": 1.45,
+          "mid": 1.35,
+          "treble": 1.45,
+          "presence": 0.2,
+          "bypassed": false
+        }
+      },
+      {
+        "PowerAmp": {
+          "drive": 0.06,
+          "amp_type": "ClassAB",
+          "sag": 0.22,
+          "sag_release": 105.0,
+          "bypassed": false
+        }
+      },
+      {
+        "Eq": {
+          "gains": [
+            0.0,
+            0.0,
+            0.5,
+            -0.5,
+            -2.0,
+            -1.0,
+            0.4,
+            0.7,
+            0.9,
+            0.5,
+            0.2,
+            0.0,
+            0.0,
+            -0.5,
+            -1.0,
+            -1.0
+          ],
+          "bypassed": false
+        }
+      },
+      {
+        "Level": {
+          "gain": 0.22,
+          "bypassed": false
+        }
+      }
+    ]
+  },
+  "impulse_response": {
+    "ir_path": "res://assets/rustortion/impulse_responses/Science Amplification/4x12/G12H-75/SM57 Brighter.wav",
+    "ir_gain": 0.08
+  }
+}
