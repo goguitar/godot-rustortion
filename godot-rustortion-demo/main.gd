@@ -7,8 +7,14 @@ const RIG_PRESET_DIR := "res://assets/rustortion/rigs"
 const SOURCE_PRESET_DIR := "res://assets/rustortion/source_presets"
 const IR_BASE_DIR := "res://assets/rustortion/impulse_responses"
 const PLAYBACK_SOURCE_DIR := "res://assets/rustortion/input_loops/rock_guitar"
-const MIN_METER_DB := -60.0
-const PEAK_HOLD_DECAY := 0.02
+const MIN_METER_DB := -70.0
+const LABEL_UPDATE_INTERVAL_SEC := 0.03
+const INPUT_GAIN_MIN_DB := -18.0
+const INPUT_GAIN_MAX_DB := 18.0
+const OUTPUT_GAIN_MIN_DB := -18.0
+const OUTPUT_GAIN_MAX_DB := 18.0
+const TONE_MIN := 0.2
+const TONE_MAX := 2.2
 
 const EQ_BAND_FREQS := [
 	25.0, 40.0, 63.0, 100.0, 160.0, 250.0, 400.0, 630.0,
@@ -23,11 +29,26 @@ var active_rig_name := ""
 var rigs: Array = []
 var playback_stream_paths := PackedStringArray()
 var selected_playback_index := 0
+var input_gain_value := 50.0
+var output_gain_value := 50.0
+var bass_value := 5.0
+var middle_value := 5.0
+var treble_value := 5.0
+
+var active_payload: Dictionary = {}
+var active_tone_preset: Dictionary = {}
+var active_amp_preset: Dictionary = {}
+var base_tone_preset: Dictionary = {}
+var base_amp_preset: Dictionary = {}
+var base_input_gain_db := 0.0
+var base_output_gain_db := 0.0
+var active_ir_name := ""
+var active_ir_bytes := PackedByteArray()
+var active_ir_gain := 0.1
 
 var input_meter_db := MIN_METER_DB
 var output_meter_db := MIN_METER_DB
-var input_peak_norm := 0.0
-var output_peak_norm := 0.0
+var label_update_accum_sec := 0.0
 
 @onready var rig_list: ItemList = %RigList
 @onready var status_label: Label = %StatusLabel
@@ -35,12 +56,15 @@ var output_peak_norm := 0.0
 @onready var playback_clip_label: Label = %PlaybackClipLabel
 @onready var current_input_label: Label = %CurrentInputLabel
 @onready var playback_input_player: AudioStreamPlayer = %PlaybackInputPlayer
-@onready var input_vu_track: Control = %InputVuTrack
-@onready var output_vu_track: Control = %OutputVuTrack
-@onready var input_vu_fill: TextureRect = %InputVuFill
-@onready var output_vu_fill: TextureRect = %OutputVuFill
-@onready var input_vu_peak: ColorRect = %InputVuPeak
-@onready var output_vu_peak: ColorRect = %OutputVuPeak
+@onready var playback_mode_button: Button = %PlaybackModeButton
+@onready var input_mode_button: Button = %InputModeButton
+@onready var input_gain_knob: Control = %InputGainKnob
+@onready var output_gain_knob: Control = %OutputGainKnob
+@onready var bass_knob: Control = %BassKnob
+@onready var middle_knob: Control = %MiddleKnob
+@onready var treble_knob: Control = %TrebleKnob
+@onready var input_vu_bar: ProgressBar = %InputVuBar
+@onready var output_vu_bar: ProgressBar = %OutputVuBar
 @onready var input_vu_value_label: Label = %InputVuValueLabel
 @onready var output_vu_value_label: Label = %OutputVuValueLabel
 
@@ -53,12 +77,13 @@ func _ready() -> void:
 	populate_rig_list()
 	apply_default_selection()
 	set_source_bus_mute_states(true, false)
-	current_input_label.text = "Current Input: Guitar dataset playback"
+	_set_input_source_mode(true)
+	_setup_gain_knobs()
+	status_label.visible = false
 
 
-func _process(_delta: float) -> void:
-	update_vu_meters()
-	update_status()
+func _process(delta: float) -> void:
+	update_vu_meters(delta)
 
 
 func _exit_tree() -> void:
@@ -111,26 +136,6 @@ func set_source_bus_mute_states(mic_muted: bool, play_muted: bool) -> void:
 func load_rigs() -> void:
 	rigs.clear()
 	load_source_presets()
-
-	for file_name in sorted_json_files(RIG_PRESET_DIR):
-		var path := "%s/%s" % [RIG_PRESET_DIR, file_name]
-		var data := load_json_dict(path)
-		if data.is_empty():
-			continue
-
-		if typeof(data.get("GearList", null)) != TYPE_DICTIONARY:
-			push_warning("Rig preset missing GearList: %s" % path)
-			continue
-
-		var payload := translate_rig_to_runtime_payload(data)
-		if payload.is_empty():
-			continue
-
-		rigs.append({
-			"name": str(data.get("Name", file_name.replace(".json", ""))),
-			"mode": "runtime",
-			"payload": payload
-		})
 
 
 func load_source_presets() -> void:
@@ -249,6 +254,22 @@ func apply_rig(index: int) -> void:
 		return
 
 	active_rig_name = str(rig.get("name", ""))
+	active_payload = translated.duplicate(true)
+	active_tone_preset = (active_payload.get("tone_preset", {}) as Dictionary).duplicate(true)
+	active_amp_preset = (active_payload.get("amp_preset", {}) as Dictionary).duplicate(true)
+	if active_tone_preset.is_empty():
+		active_tone_preset = _parse_json_dict(str(active_payload.get("tone_json", "")))
+	if active_amp_preset.is_empty():
+		active_amp_preset = _parse_json_dict(str(active_payload.get("amplifier_json", "")))
+	base_tone_preset = active_tone_preset.duplicate(true)
+	base_amp_preset = active_amp_preset.duplicate(true)
+	base_input_gain_db = _extract_input_gain_db(base_tone_preset)
+	base_output_gain_db = _extract_output_gain_db(base_amp_preset)
+	active_ir_name = str(rig.get("name", "Rig"))
+	active_ir_bytes = ir_bytes
+	active_ir_gain = float(translated.get("ir_gain", 0.1))
+	_sync_knobs_from_payload(active_payload)
+	_apply_live_amp_settings()
 
 
 func translate_rig_to_runtime_payload(data: Dictionary) -> Dictionary:
@@ -269,7 +290,7 @@ func translate_rig_to_runtime_payload(data: Dictionary) -> Dictionary:
 	var pres_pct := _normalize_amp_knob(_get_knob(amp_knobs, "%s_Pres" % amp_key, 50.0))
 	var res_pct := _normalize_amp_knob(_get_knob(amp_knobs, "%s_Res" % amp_key, 50.0))
 
-	var tone_json := JSON.stringify({
+	var tone_preset := {
 		"schema_version": 1,
 		"name": str(data.get("Name", "Rig Tone")),
 		"preamp_chain": [
@@ -286,7 +307,7 @@ func translate_rig_to_runtime_payload(data: Dictionary) -> Dictionary:
 				"bypassed": false
 			}
 		]
-	})
+	}
 
 	var eq_gains := [
 		0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
@@ -297,7 +318,7 @@ func translate_rig_to_runtime_payload(data: Dictionary) -> Dictionary:
 	_apply_eq_point(eq_gains, _get_knob(rack_knobs, "Rack_StudioEQ_HiMidFreq", 1.6) * 1000.0, _get_knob(rack_knobs, "Rack_StudioEQ_HiMid", 0.0))
 	_apply_eq_point(eq_gains, _get_knob(rack_knobs, "Rack_StudioEQ_TrebleFreq", 6.3) * 1000.0, _get_knob(rack_knobs, "Rack_StudioEQ_Treble", 0.0))
 
-	var amplifier_json := JSON.stringify({
+	var amp_preset := {
 		"schema_version": 1,
 		"name": str(data.get("Name", "Rig Amp")),
 		"input_filters": {
@@ -339,11 +360,13 @@ func translate_rig_to_runtime_payload(data: Dictionary) -> Dictionary:
 				}
 			}
 		]
-	})
+	}
 
 	return {
-		"tone_json": tone_json,
-		"amplifier_json": amplifier_json,
+		"tone_preset": tone_preset,
+		"amp_preset": amp_preset,
+		"tone_json": JSON.stringify(tone_preset),
+		"amplifier_json": JSON.stringify(amp_preset),
 		"ir_path": _map_cab_key_to_ir_path(cab_key),
 		"ir_gain": 0.1
 	}
@@ -391,22 +414,24 @@ func translate_source_preset_to_runtime_payload(preset: Dictionary) -> Dictionar
 	if ir_path == "":
 		ir_path = _map_cab_key_to_ir_path("Cab_GB412CMKIII_57_Edge")
 
-	var tone_json := JSON.stringify({
+	var tone_preset := {
 		"schema_version": 1,
 		"name": "%s Tone" % str(preset.get("name", "Source")),
 		"preamp_chain": preamp_chain
-	})
+	}
 
-	var amplifier_json := JSON.stringify({
+	var amp_preset := {
 		"schema_version": 1,
 		"name": "%s Amp" % str(preset.get("name", "Source")),
 		"input_filters": input_filters,
 		"amp_chain": amp_chain
-	})
+	}
 
 	return {
-		"tone_json": tone_json,
-		"amplifier_json": amplifier_json,
+		"tone_preset": tone_preset,
+		"amp_preset": amp_preset,
+		"tone_json": JSON.stringify(tone_preset),
+		"amplifier_json": JSON.stringify(amp_preset),
 		"ir_path": ir_path,
 		"ir_gain": float(preset.get("ir_gain", 0.1))
 	}
@@ -443,7 +468,7 @@ func _apply_eq_point(gains: Array, freq_hz: float, gain_db: float) -> void:
 	gains[best_idx] = clampf(float(gains[best_idx]) + gain_db, -12.0, 12.0)
 
 
-func update_vu_meters() -> void:
+func update_vu_meters(delta: float) -> void:
 	if play_bus_idx >= 0:
 		var in_peak := maxf(
 			AudioServer.get_bus_peak_volume_left_db(play_bus_idx, 0),
@@ -460,28 +485,14 @@ func update_vu_meters() -> void:
 
 	var in_norm := _db_to_meter_norm(input_meter_db)
 	var out_norm := _db_to_meter_norm(output_meter_db)
+	input_vu_bar.value = in_norm * 100.0
+	output_vu_bar.value = out_norm * 100.0
 
-	input_peak_norm = maxf(in_norm, input_peak_norm - PEAK_HOLD_DECAY)
-	output_peak_norm = maxf(out_norm, output_peak_norm - PEAK_HOLD_DECAY)
-
-	_update_meter_visuals(input_vu_track, input_vu_fill, input_vu_peak, in_norm, input_peak_norm)
-	_update_meter_visuals(output_vu_track, output_vu_fill, output_vu_peak, out_norm, output_peak_norm)
-
-	input_vu_value_label.text = "%.1f dB" % input_meter_db
-	output_vu_value_label.text = "%.1f dB" % output_meter_db
-
-
-func _update_meter_visuals(
-	track: Control,
-	fill: TextureRect,
-	peak: ColorRect,
-	norm: float,
-	peak_norm: float,
-) -> void:
-	var w := maxf(track.size.x, 1.0)
-	fill.size.x = maxf(1.0, w * norm)
-	var peak_x := clampf(w * peak_norm - peak.size.x * 0.5, 0.0, maxf(0.0, w - peak.size.x))
-	peak.position.x = peak_x
+	label_update_accum_sec += delta
+	if label_update_accum_sec >= LABEL_UPDATE_INTERVAL_SEC:
+		label_update_accum_sec = 0.0
+		input_vu_value_label.text = "%.1f dB" % input_meter_db
+		output_vu_value_label.text = "%.1f dB" % output_meter_db
 
 
 func _smooth_meter_db(current_db: float, target_db: float) -> float:
@@ -503,10 +514,17 @@ func update_status() -> void:
 	var source_channels := AudioServer.get_bus_channels(play_bus_idx) if play_bus_idx >= 0 else 0
 	var process_channels := AudioServer.get_bus_channels(rustortion_bus_idx) if rustortion_bus_idx >= 0 else 0
 	var effect_error := _get_effect_error()
+	var input_gain_db := _value_to_db(input_gain_value, INPUT_GAIN_MIN_DB, INPUT_GAIN_MAX_DB)
+	var output_gain_db := _value_to_db(output_gain_value, OUTPUT_GAIN_MIN_DB, OUTPUT_GAIN_MAX_DB)
 
-	status_label.text = "Rig: %s\nPlayback Clip: %s\nSource Bus: %s (%d ch)\nProcess Bus: %s (%d ch)\nPlay Playing: %s\nMix Rate: %.0f Hz\nLast Error: %s" % [
+	status_label.text = "Rig: %s\nPlayback Clip: %s\nInput Gain: %.1f dB\nBass: %.1f  Mid: %.1f  Treble: %.1f\nOutput Gain: %.1f dB\nSource Bus: %s (%d ch)\nProcess Bus: %s (%d ch)\nPlay Playing: %s\nMix Rate: %.0f Hz\nLast Error: %s" % [
 		active_rig_name if active_rig_name != "" else "(none)",
 		playback_clip,
+		input_gain_db,
+		bass_value,
+		middle_value,
+		treble_value,
+		output_gain_db,
 		PLAY_BUS_NAME,
 		source_channels,
 		RUSTORTION_BUS_NAME,
@@ -515,6 +533,236 @@ func update_status() -> void:
 		AudioServer.get_mix_rate(),
 		effect_error if effect_error != "" else "OK"
 	]
+
+
+func _setup_gain_knobs() -> void:
+	if input_gain_knob == null:
+		push_warning("InputGainKnob node missing")
+	else:
+		if input_gain_knob.has_signal("value_changed"):
+			input_gain_knob.connect("value_changed", Callable(self, "set_input_gain"))
+		if input_gain_knob.has_method("set_value"):
+			input_gain_knob.call("set_value", input_gain_value, false)
+
+	if output_gain_knob == null:
+		push_warning("OutputGainKnob node missing")
+	else:
+		if output_gain_knob.has_signal("value_changed"):
+			output_gain_knob.connect("value_changed", Callable(self, "set_output_gain"))
+		if output_gain_knob.has_method("set_value"):
+			output_gain_knob.call("set_value", output_gain_value, false)
+
+	if bass_knob != null:
+		if bass_knob.has_signal("value_changed"):
+			bass_knob.connect("value_changed", Callable(self, "set_bass"))
+		if bass_knob.has_method("set_value"):
+			bass_knob.call("set_value", bass_value, false)
+
+	if middle_knob != null:
+		if middle_knob.has_signal("value_changed"):
+			middle_knob.connect("value_changed", Callable(self, "set_middle"))
+		if middle_knob.has_method("set_value"):
+			middle_knob.call("set_value", middle_value, false)
+
+	if treble_knob != null:
+		if treble_knob.has_signal("value_changed"):
+			treble_knob.connect("value_changed", Callable(self, "set_treble"))
+		if treble_knob.has_method("set_value"):
+			treble_knob.call("set_value", treble_value, false)
+
+	_apply_live_amp_settings()
+
+
+func set_input_gain(v: float) -> void:
+	input_gain_value = clampf(v, 0.0, 100.0)
+	_apply_live_amp_settings()
+
+
+func set_output_gain(v: float) -> void:
+	output_gain_value = clampf(v, 0.0, 100.0)
+	_apply_live_amp_settings()
+
+
+func set_bass(v: float) -> void:
+	bass_value = clampf(v, 0.0, 10.0)
+	_apply_live_amp_settings()
+
+
+func set_middle(v: float) -> void:
+	middle_value = clampf(v, 0.0, 10.0)
+	_apply_live_amp_settings()
+
+
+func set_treble(v: float) -> void:
+	treble_value = clampf(v, 0.0, 10.0)
+	_apply_live_amp_settings()
+
+
+func _apply_live_amp_settings() -> void:
+	if rustortion_effect == null:
+		return
+	if active_ir_bytes.is_empty():
+		return
+	if base_tone_preset.is_empty() or base_amp_preset.is_empty():
+		return
+
+	active_tone_preset = base_tone_preset.duplicate(true)
+	active_amp_preset = base_amp_preset.duplicate(true)
+	var tone_cfg := active_tone_preset
+	var amp_cfg := active_amp_preset
+	tone_cfg["schema_version"] = int(tone_cfg.get("schema_version", 1))
+	amp_cfg["schema_version"] = int(amp_cfg.get("schema_version", 1))
+
+	var target_input_db := _value_to_db(input_gain_value, INPUT_GAIN_MIN_DB, INPUT_GAIN_MAX_DB)
+	var target_output_db := _value_to_db(output_gain_value, OUTPUT_GAIN_MIN_DB, OUTPUT_GAIN_MAX_DB)
+	var input_gain_factor := _db_to_factor(target_input_db - base_input_gain_db)
+	var output_gain_factor := _db_to_factor(target_output_db - base_output_gain_db)
+	var tone_bass := lerpf(TONE_MIN, TONE_MAX, bass_value / 10.0)
+	var tone_mid := lerpf(TONE_MIN, TONE_MAX, middle_value / 10.0)
+	var tone_treble := lerpf(TONE_MIN, TONE_MAX, treble_value / 10.0)
+
+	var preamp_chain: Array = tone_cfg.get("preamp_chain", [])
+	for i in range(preamp_chain.size()):
+		if typeof(preamp_chain[i]) != TYPE_DICTIONARY:
+			continue
+		var stage: Dictionary = preamp_chain[i]
+		if stage.has("gain"):
+			var base_gain := float(stage.get("gain", 1.0))
+			stage["gain"] = maxf(0.05, base_gain * input_gain_factor)
+		preamp_chain[i] = stage
+	tone_cfg["preamp_chain"] = preamp_chain
+
+	var amp_chain: Array = amp_cfg.get("amp_chain", [])
+	for i in range(amp_chain.size()):
+		if typeof(amp_chain[i]) != TYPE_DICTIONARY:
+			continue
+		var stage_entry: Dictionary = amp_chain[i]
+		if stage_entry.has("ToneStack"):
+			var stack: Dictionary = stage_entry.get("ToneStack", {}).duplicate(true)
+			stack["bass"] = tone_bass
+			stack["mid"] = tone_mid
+			stack["treble"] = tone_treble
+			stage_entry["ToneStack"] = stack
+		if stage_entry.has("Level"):
+			var level: Dictionary = stage_entry.get("Level", {}).duplicate(true)
+			var base_gain := float(level.get("gain", 0.2))
+			level["gain"] = maxf(0.00001, base_gain * output_gain_factor)
+			stage_entry["Level"] = level
+		amp_chain[i] = stage_entry
+	amp_cfg["amp_chain"] = amp_chain
+
+	var ok: bool = bool(
+		rustortion_effect.call(
+			"load_amp_tone_and_ir_data",
+			JSON.stringify(amp_cfg),
+			JSON.stringify(tone_cfg),
+			active_ir_name,
+			active_ir_bytes,
+			active_ir_gain
+		)
+	)
+	if not ok:
+		push_warning("Failed to apply live amp settings: %s" % _get_effect_error())
+
+
+func _sync_knobs_from_payload(payload: Dictionary) -> void:
+	var tone_base := (payload.get("tone_preset", {}) as Dictionary).duplicate(true)
+	var amp_base := (payload.get("amp_preset", {}) as Dictionary).duplicate(true)
+	if tone_base.is_empty():
+		tone_base = _parse_json_dict(str(payload.get("tone_json", "")))
+	if amp_base.is_empty():
+		amp_base = _parse_json_dict(str(payload.get("amplifier_json", "")))
+
+	input_gain_value = _db_to_value(base_input_gain_db, INPUT_GAIN_MIN_DB, INPUT_GAIN_MAX_DB)
+	output_gain_value = _db_to_value(base_output_gain_db, OUTPUT_GAIN_MIN_DB, OUTPUT_GAIN_MAX_DB)
+
+	if not tone_base.is_empty():
+		var preamp_chain: Array = tone_base.get("preamp_chain", [])
+		if preamp_chain.is_empty():
+			input_gain_value = _db_to_value(0.0, INPUT_GAIN_MIN_DB, INPUT_GAIN_MAX_DB)
+
+	if not amp_base.is_empty():
+		var amp_chain: Array = amp_base.get("amp_chain", [])
+		for entry in amp_chain:
+			if typeof(entry) != TYPE_DICTIONARY:
+				continue
+			var stage_entry: Dictionary = entry
+			if stage_entry.has("ToneStack"):
+				var stack: Dictionary = stage_entry.get("ToneStack", {})
+				bass_value = _tone_value_from_stack(float(stack.get("bass", 1.0)))
+				middle_value = _tone_value_from_stack(float(stack.get("mid", 1.0)))
+				treble_value = _tone_value_from_stack(float(stack.get("treble", 1.0)))
+
+	_set_knob_control_value(input_gain_knob, input_gain_value)
+	_set_knob_control_value(output_gain_knob, output_gain_value)
+	_set_knob_control_value(bass_knob, bass_value)
+	_set_knob_control_value(middle_knob, middle_value)
+	_set_knob_control_value(treble_knob, treble_value)
+
+
+func _set_knob_control_value(knob: Control, v: float) -> void:
+	if knob == null:
+		return
+	if knob.has_method("set_value"):
+		knob.call("set_value", v, false)
+
+
+func _input_value_from_preamp_gain(gain: float) -> float:
+	var norm := clampf((gain - 1.0) / (2.4 - 1.0), 0.0, 1.0)
+	return norm * 100.0
+
+
+func _tone_value_from_stack(stack_value: float) -> float:
+	var norm := clampf((stack_value - TONE_MIN) / (TONE_MAX - TONE_MIN), 0.0, 1.0)
+	return norm * 10.0
+
+
+func _db_to_factor(gain_db: float) -> float:
+	return pow(10.0, gain_db / 20.0)
+
+
+func _value_to_db(v: float, min_db: float, max_db: float) -> float:
+	return lerpf(min_db, max_db, clampf(v / 100.0, 0.0, 1.0))
+
+
+func _db_to_value(gain_db: float, min_db: float, max_db: float) -> float:
+	var norm := clampf((gain_db - min_db) / (max_db - min_db), 0.0, 1.0)
+	return norm * 100.0
+
+
+func _extract_input_gain_db(tone_preset: Dictionary) -> float:
+	var preamp_chain: Array = tone_preset.get("preamp_chain", [])
+	for stage_var in preamp_chain:
+		if typeof(stage_var) != TYPE_DICTIONARY:
+			continue
+		var stage: Dictionary = stage_var
+		if stage.has("gain"):
+			var gain_lin := maxf(float(stage.get("gain", 1.0)), 0.000001)
+			return 20.0 * (log(gain_lin) / log(10.0))
+	return 0.0
+
+
+func _extract_output_gain_db(amp_preset: Dictionary) -> float:
+	var amp_chain: Array = amp_preset.get("amp_chain", [])
+	for stage_var in amp_chain:
+		if typeof(stage_var) != TYPE_DICTIONARY:
+			continue
+		var stage_entry: Dictionary = stage_var
+		if not stage_entry.has("Level"):
+			continue
+		var level: Dictionary = stage_entry.get("Level", {})
+		var gain_lin := maxf(float(level.get("gain", 1.0)), 0.000001)
+		return 20.0 * (log(gain_lin) / log(10.0))
+	return 0.0
+
+
+func _parse_json_dict(json_text: String) -> Dictionary:
+	if json_text == "":
+		return {}
+	var parsed: Variant = JSON.parse_string(json_text)
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return {}
+	return parsed as Dictionary
 
 
 func _get_effect_error() -> String:
@@ -602,6 +850,41 @@ func _on_playback_input_player_finished() -> void:
 	if playback_stream_paths.is_empty():
 		return
 
+	if input_mode_button != null and input_mode_button.button_pressed:
+		return
+
 	selected_playback_index = (selected_playback_index + 1) % playback_stream_paths.size()
 	playback_clip_option.select(selected_playback_index)
 	start_playback_current()
+
+
+func _set_input_source_mode(playback_mode: bool) -> void:
+	if playback_mode:
+		set_source_bus_mute_states(true, false)
+		if not playback_stream_paths.is_empty() and not playback_input_player.playing:
+			start_playback_current()
+		current_input_label.text = "Current Input: Guitar dataset playback"
+		playback_clip_option.disabled = false
+	else:
+		set_source_bus_mute_states(false, true)
+		if playback_input_player.playing:
+			playback_input_player.stop()
+		current_input_label.text = "Current Input: System input"
+		playback_clip_option.disabled = true
+
+	if playback_mode_button != null:
+		playback_mode_button.button_pressed = playback_mode
+		if playback_mode_button.has_method("refresh_visual_state"):
+			playback_mode_button.call("refresh_visual_state")
+	if input_mode_button != null:
+		input_mode_button.button_pressed = not playback_mode
+		if input_mode_button.has_method("refresh_visual_state"):
+			input_mode_button.call("refresh_visual_state")
+
+
+func _on_playback_mode_button_pressed() -> void:
+	_set_input_source_mode(true)
+
+
+func _on_input_mode_button_pressed() -> void:
+	_set_input_source_mode(false)

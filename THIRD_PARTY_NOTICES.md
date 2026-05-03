@@ -9,6 +9,7 @@ The demo VU meter styling includes image assets adapted from:
 - Files used:
   - `MeterBackground.png`
   - `InputLevelBackground.png`
+  - `KnobBackground@2x.png`
 - Repository: https://github.com/sdatkinson/NeuralAmpModelerPlugin
 
 License: MIT License
