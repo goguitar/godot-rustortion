@@ -23,6 +23,7 @@ const EQ_BAND_FREQS := [
 
 var rustortion_effect
 var rustortion_bus_idx := -1
+var mic_bus_idx := -1
 var play_bus_idx := -1
 var active_rig_name := ""
 
@@ -56,6 +57,7 @@ var label_update_accum_sec := 0.0
 @onready var playback_clip_label: Label = %PlaybackClipLabel
 @onready var current_input_label: Label = %CurrentInputLabel
 @onready var playback_input_player: AudioStreamPlayer = %PlaybackInputPlayer
+@onready var mic_input_player: AudioStreamPlayer = %MicInputPlayer
 @onready var playback_mode_button: Button = %PlaybackModeButton
 @onready var input_mode_button: Button = %InputModeButton
 @onready var input_gain_knob: Control = %InputGainKnob
@@ -89,13 +91,17 @@ func _process(delta: float) -> void:
 func _exit_tree() -> void:
 	if playback_input_player != null and playback_input_player.playing:
 		playback_input_player.stop()
+	if mic_input_player != null and mic_input_player.playing:
+		mic_input_player.stop()
 
 	rustortion_effect = null
 	rustortion_bus_idx = -1
+	mic_bus_idx = -1
 	play_bus_idx = -1
 
 
 func setup_bus_effects() -> void:
+	mic_bus_idx = AudioServer.get_bus_index(MIC_BUS_NAME)
 	play_bus_idx = AudioServer.get_bus_index(PLAY_BUS_NAME)
 	rustortion_bus_idx = AudioServer.get_bus_index(RUSTORTION_BUS_NAME)
 
@@ -469,10 +475,11 @@ func _apply_eq_point(gains: Array, freq_hz: float, gain_db: float) -> void:
 
 
 func update_vu_meters(delta: float) -> void:
-	if play_bus_idx >= 0:
+	var source_bus_idx := _active_source_bus_idx()
+	if source_bus_idx >= 0:
 		var in_peak := maxf(
-			AudioServer.get_bus_peak_volume_left_db(play_bus_idx, 0),
-			AudioServer.get_bus_peak_volume_right_db(play_bus_idx, 0)
+			AudioServer.get_bus_peak_volume_left_db(source_bus_idx, 0),
+			AudioServer.get_bus_peak_volume_right_db(source_bus_idx, 0)
 		)
 		input_meter_db = _smooth_meter_db(input_meter_db, in_peak)
 
@@ -493,6 +500,12 @@ func update_vu_meters(delta: float) -> void:
 		label_update_accum_sec = 0.0
 		input_vu_value_label.text = "%.1f dB" % input_meter_db
 		output_vu_value_label.text = "%.1f dB" % output_meter_db
+
+
+func _active_source_bus_idx() -> int:
+	if input_mode_button != null and input_mode_button.button_pressed:
+		return mic_bus_idx
+	return play_bus_idx
 
 
 func _smooth_meter_db(current_db: float, target_db: float) -> float:
@@ -738,7 +751,8 @@ func _extract_input_gain_db(tone_preset: Dictionary) -> float:
 		var stage: Dictionary = stage_var
 		if stage.has("gain"):
 			var gain_lin := maxf(float(stage.get("gain", 1.0)), 0.000001)
-			return 20.0 * (log(gain_lin) / log(10.0))
+			var gain_db := 20.0 * (log(gain_lin) / log(10.0))
+			return clampf(gain_db, INPUT_GAIN_MIN_DB, 9.0)
 	return 0.0
 
 
@@ -861,6 +875,8 @@ func _on_playback_input_player_finished() -> void:
 func _set_input_source_mode(playback_mode: bool) -> void:
 	if playback_mode:
 		set_source_bus_mute_states(true, false)
+		if mic_input_player != null and mic_input_player.playing:
+			mic_input_player.stop()
 		if not playback_stream_paths.is_empty() and not playback_input_player.playing:
 			start_playback_current()
 		current_input_label.text = "Current Input: Guitar dataset playback"
@@ -869,15 +885,17 @@ func _set_input_source_mode(playback_mode: bool) -> void:
 		set_source_bus_mute_states(false, true)
 		if playback_input_player.playing:
 			playback_input_player.stop()
+		if mic_input_player != null and not mic_input_player.playing:
+			mic_input_player.play()
 		current_input_label.text = "Current Input: System input"
 		playback_clip_option.disabled = true
 
 	if playback_mode_button != null:
-		playback_mode_button.button_pressed = playback_mode
+		playback_mode_button.set_pressed_no_signal(playback_mode)
 		if playback_mode_button.has_method("refresh_visual_state"):
 			playback_mode_button.call("refresh_visual_state")
 	if input_mode_button != null:
-		input_mode_button.button_pressed = not playback_mode
+		input_mode_button.set_pressed_no_signal(not playback_mode)
 		if input_mode_button.has_method("refresh_visual_state"):
 			input_mode_button.call("refresh_visual_state")
 

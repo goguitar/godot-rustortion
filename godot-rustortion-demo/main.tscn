@@ -1,4 +1,4 @@
-[gd_scene load_steps=5 format=3 uid="uid://dudfqxbbnylvy"]
+[gd_scene load_steps=6 format=3 uid="uid://dudfqxbbnylvy"]
 
 [ext_resource type="Script" uid="uid://d3aksr5nkl7w3" path="res://main.gd" id="1"]
 [ext_resource type="PackedScene" uid="uid://dirl8px71jydn" path="res://ui/knob_meter.tscn" id="2"]
@@ -22,6 +22,8 @@ corner_radius_top_left = 3
 corner_radius_top_right = 3
 corner_radius_bottom_right = 3
 corner_radius_bottom_left = 3
+
+[sub_resource type="AudioStreamMicrophone" id="AudioStreamMicrophone_mic"]
 
 [node name="Main" type="Control"]
 layout_mode = 3
@@ -321,6 +323,11 @@ horizontal_alignment = 1
 [node name="PlaybackInputPlayer" type="AudioStreamPlayer" parent="."]
 unique_name_in_owner = true
 bus = &"GuitarPlay"
+
+[node name="MicInputPlayer" type="AudioStreamPlayer" parent="."]
+unique_name_in_owner = true
+stream = SubResource("AudioStreamMicrophone_mic")
+bus = &"GuitarMic"
 
 [connection signal="item_selected" from="MarginContainer/RootLayout/RigPanel/RigMargin/RigVBox/RigList" to="." method="_on_rig_list_item_selected"]
 [connection signal="item_selected" from="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/PlaybackClipRow/PlaybackClipOption" to="." method="_on_playback_clip_option_item_selected"]
