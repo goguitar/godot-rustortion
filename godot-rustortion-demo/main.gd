@@ -41,7 +41,6 @@ var active_tone_preset: Dictionary = {}
 var active_amp_preset: Dictionary = {}
 var base_tone_preset: Dictionary = {}
 var base_amp_preset: Dictionary = {}
-var base_input_gain_db := 0.0
 var base_output_gain_db := 0.0
 var active_ir_name := ""
 var active_ir_bytes := PackedByteArray()
@@ -269,7 +268,6 @@ func apply_rig(index: int) -> void:
 		active_amp_preset = _parse_json_dict(str(active_payload.get("amplifier_json", "")))
 	base_tone_preset = active_tone_preset.duplicate(true)
 	base_amp_preset = active_amp_preset.duplicate(true)
-	base_input_gain_db = _extract_input_gain_db(base_tone_preset)
 	base_output_gain_db = _extract_output_gain_db(base_amp_preset)
 	active_ir_name = str(rig.get("name", "Rig"))
 	active_ir_bytes = ir_bytes
@@ -475,7 +473,7 @@ func _apply_eq_point(gains: Array, freq_hz: float, gain_db: float) -> void:
 
 
 func update_vu_meters(delta: float) -> void:
-	var source_bus_idx := _active_source_bus_idx()
+	var source_bus_idx := rustortion_bus_idx
 	if source_bus_idx >= 0:
 		var in_peak := maxf(
 			AudioServer.get_bus_peak_volume_left_db(source_bus_idx, 0),
@@ -500,14 +498,6 @@ func update_vu_meters(delta: float) -> void:
 		label_update_accum_sec = 0.0
 		input_vu_value_label.text = "%.1f dB" % input_meter_db
 		output_vu_value_label.text = "%.1f dB" % output_meter_db
-
-
-func _active_source_bus_idx() -> int:
-	if input_mode_button != null and input_mode_button.button_pressed:
-		return mic_bus_idx
-	return play_bus_idx
-
-
 func _smooth_meter_db(current_db: float, target_db: float) -> float:
 	target_db = maxf(target_db, MIN_METER_DB)
 	if target_db > current_db:
@@ -583,12 +573,13 @@ func _setup_gain_knobs() -> void:
 		if treble_knob.has_method("set_value"):
 			treble_knob.call("set_value", treble_value, false)
 
+	_apply_input_bus_gain()
 	_apply_live_amp_settings()
 
 
 func set_input_gain(v: float) -> void:
 	input_gain_value = clampf(v, 0.0, 100.0)
-	_apply_live_amp_settings()
+	_apply_input_bus_gain()
 
 
 func set_output_gain(v: float) -> void:
@@ -626,9 +617,7 @@ func _apply_live_amp_settings() -> void:
 	tone_cfg["schema_version"] = int(tone_cfg.get("schema_version", 1))
 	amp_cfg["schema_version"] = int(amp_cfg.get("schema_version", 1))
 
-	var target_input_db := _value_to_db(input_gain_value, INPUT_GAIN_MIN_DB, INPUT_GAIN_MAX_DB)
 	var target_output_db := _value_to_db(output_gain_value, OUTPUT_GAIN_MIN_DB, OUTPUT_GAIN_MAX_DB)
-	var input_gain_factor := _db_to_factor(target_input_db - base_input_gain_db)
 	var output_gain_factor := _db_to_factor(target_output_db - base_output_gain_db)
 	var tone_bass := lerpf(TONE_MIN, TONE_MAX, bass_value / 10.0)
 	var tone_mid := lerpf(TONE_MIN, TONE_MAX, middle_value / 10.0)
@@ -639,9 +628,6 @@ func _apply_live_amp_settings() -> void:
 		if typeof(preamp_chain[i]) != TYPE_DICTIONARY:
 			continue
 		var stage: Dictionary = preamp_chain[i]
-		if stage.has("gain"):
-			var base_gain := float(stage.get("gain", 1.0))
-			stage["gain"] = maxf(0.05, base_gain * input_gain_factor)
 		preamp_chain[i] = stage
 	tone_cfg["preamp_chain"] = preamp_chain
 
@@ -686,7 +672,7 @@ func _sync_knobs_from_payload(payload: Dictionary) -> void:
 	if amp_base.is_empty():
 		amp_base = _parse_json_dict(str(payload.get("amplifier_json", "")))
 
-	input_gain_value = _db_to_value(base_input_gain_db, INPUT_GAIN_MIN_DB, INPUT_GAIN_MAX_DB)
+	input_gain_value = _db_to_value(0.0, INPUT_GAIN_MIN_DB, INPUT_GAIN_MAX_DB)
 	output_gain_value = _db_to_value(base_output_gain_db, OUTPUT_GAIN_MIN_DB, OUTPUT_GAIN_MAX_DB)
 
 	if not tone_base.is_empty():
@@ -743,19 +729,6 @@ func _db_to_value(gain_db: float, min_db: float, max_db: float) -> float:
 	return norm * 100.0
 
 
-func _extract_input_gain_db(tone_preset: Dictionary) -> float:
-	var preamp_chain: Array = tone_preset.get("preamp_chain", [])
-	for stage_var in preamp_chain:
-		if typeof(stage_var) != TYPE_DICTIONARY:
-			continue
-		var stage: Dictionary = stage_var
-		if stage.has("gain"):
-			var gain_lin := maxf(float(stage.get("gain", 1.0)), 0.000001)
-			var gain_db := 20.0 * (log(gain_lin) / log(10.0))
-			return clampf(gain_db, INPUT_GAIN_MIN_DB, 9.0)
-	return 0.0
-
-
 func _extract_output_gain_db(amp_preset: Dictionary) -> float:
 	var amp_chain: Array = amp_preset.get("amp_chain", [])
 	for stage_var in amp_chain:
@@ -768,6 +741,13 @@ func _extract_output_gain_db(amp_preset: Dictionary) -> float:
 		var gain_lin := maxf(float(level.get("gain", 1.0)), 0.000001)
 		return 20.0 * (log(gain_lin) / log(10.0))
 	return 0.0
+
+
+func _apply_input_bus_gain() -> void:
+	if rustortion_bus_idx < 0:
+		return
+	var gain_db := _value_to_db(input_gain_value, INPUT_GAIN_MIN_DB, INPUT_GAIN_MAX_DB)
+	AudioServer.set_bus_volume_db(rustortion_bus_idx, gain_db)
 
 
 func _parse_json_dict(json_text: String) -> Dictionary:
