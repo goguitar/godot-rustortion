@@ -137,7 +137,6 @@ func find_rustortion_effect_index(bus_idx: int) -> int:
 
 
 func set_source_bus_mute_states(mic_muted: bool, play_muted: bool) -> void:
-	var mic_bus_idx := AudioServer.get_bus_index(MIC_BUS_NAME)
 	if mic_bus_idx >= 0:
 		AudioServer.set_bus_mute(mic_bus_idx, mic_muted)
 
@@ -498,6 +497,8 @@ func update_vu_meters(delta: float) -> void:
 		label_update_accum_sec = 0.0
 		input_vu_value_label.text = "%.1f dB" % input_meter_db
 		output_vu_value_label.text = "%.1f dB" % output_meter_db
+
+
 func _smooth_meter_db(current_db: float, target_db: float) -> float:
 	target_db = maxf(target_db, MIN_METER_DB)
 	if target_db > current_db:
@@ -624,11 +625,6 @@ func _apply_live_amp_settings() -> void:
 	var tone_treble := lerpf(TONE_MIN, TONE_MAX, treble_value / 10.0)
 
 	var preamp_chain: Array = tone_cfg.get("preamp_chain", [])
-	for i in range(preamp_chain.size()):
-		if typeof(preamp_chain[i]) != TYPE_DICTIONARY:
-			continue
-		var stage: Dictionary = preamp_chain[i]
-		preamp_chain[i] = stage
 	tone_cfg["preamp_chain"] = preamp_chain
 
 	var amp_chain: Array = amp_cfg.get("amp_chain", [])
