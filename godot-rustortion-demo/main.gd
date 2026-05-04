@@ -21,7 +21,7 @@ const EQ_BAND_FREQS := [
 	1000.0, 1600.0, 2500.0, 4000.0, 6300.0, 10000.0, 16000.0, 20000.0
 ]
 
-var rustortion_effect
+@onready var rustortion_effect: AudioEffectRustortion = _resolve_rustortion_effect()
 var rustortion_bus_idx := -1
 var mic_bus_idx := -1
 var play_bus_idx := -1
@@ -106,16 +106,23 @@ func setup_bus_effects() -> void:
 
 	if rustortion_bus_idx < 0:
 		push_error("Missing audio bus: %s" % RUSTORTION_BUS_NAME)
-		return
 
-	var rustortion_effect_index := find_rustortion_effect_index(rustortion_bus_idx)
-	if rustortion_effect_index < 0:
+
+func _resolve_rustortion_effect() -> AudioEffectRustortion:
+	var bus_idx := AudioServer.get_bus_index(RUSTORTION_BUS_NAME)
+	if bus_idx < 0:
+		push_error("Missing audio bus: %s" % RUSTORTION_BUS_NAME)
+		return null
+
+	var effect_idx := find_rustortion_effect_index(bus_idx)
+	if effect_idx < 0:
 		push_error("Missing Rustortion effect on bus %s" % RUSTORTION_BUS_NAME)
-		return
+		return null
 
-	rustortion_effect = AudioServer.get_bus_effect(rustortion_bus_idx, rustortion_effect_index)
-	if rustortion_effect == null:
-		push_error("Rustortion effect could not be retrieved from bus %s" % RUSTORTION_BUS_NAME)
+	var effect := AudioServer.get_bus_effect(bus_idx, effect_idx) as AudioEffectRustortion
+	if effect == null:
+		push_error("Rustortion effect on bus %s is not AudioEffectRustortion" % RUSTORTION_BUS_NAME)
+	return effect
 
 
 func find_rustortion_effect_index(bus_idx: int) -> int:
@@ -244,8 +251,7 @@ func apply_rig(index: int) -> void:
 		return
 
 	var ok: bool = bool(
-		rustortion_effect.call(
-			"load_amp_tone_and_ir_data",
+		rustortion_effect.load_amp_tone_and_ir_data(
 			str(translated.get("amplifier_json", "")),
 			str(translated.get("tone_json", "")),
 			str(rig.get("name", "Rig")),
@@ -473,20 +479,14 @@ func _apply_eq_point(gains: Array, freq_hz: float, gain_db: float) -> void:
 
 
 func update_vu_meters(delta: float) -> void:
-	var source_bus_idx := rustortion_bus_idx
-	if source_bus_idx >= 0:
-		var in_peak := maxf(
-			AudioServer.get_bus_peak_volume_left_db(source_bus_idx, 0),
-			AudioServer.get_bus_peak_volume_right_db(source_bus_idx, 0)
-		)
-		input_meter_db = _smooth_meter_db(input_meter_db, in_peak)
+	var input_peak_db := MIN_METER_DB
+	var output_peak_db := MIN_METER_DB
+	if rustortion_effect != null:
+		input_peak_db = float(rustortion_effect.get_input_peak_db())
+		output_peak_db = float(rustortion_effect.get_output_peak_db())
 
-	if rustortion_bus_idx >= 0:
-		var out_peak := maxf(
-			AudioServer.get_bus_peak_volume_left_db(rustortion_bus_idx, 0),
-			AudioServer.get_bus_peak_volume_right_db(rustortion_bus_idx, 0)
-		)
-		output_meter_db = _smooth_meter_db(output_meter_db, out_peak)
+	input_meter_db = _smooth_meter_db(input_meter_db, input_peak_db)
+	output_meter_db = _smooth_meter_db(output_meter_db, output_peak_db)
 
 	var in_norm := _db_to_meter_norm(input_meter_db)
 	var out_norm := _db_to_meter_norm(output_meter_db)
@@ -651,8 +651,7 @@ func _apply_live_amp_settings() -> void:
 	amp_cfg["amp_chain"] = amp_chain
 
 	var ok: bool = bool(
-		rustortion_effect.call(
-			"load_amp_tone_and_ir_data",
+		rustortion_effect.load_amp_tone_and_ir_data(
 			JSON.stringify(amp_cfg),
 			JSON.stringify(tone_cfg),
 			active_ir_name,
@@ -760,8 +759,8 @@ func _parse_json_dict(json_text: String) -> Dictionary:
 
 
 func _get_effect_error() -> String:
-	if rustortion_effect and rustortion_effect.has_method("get_last_error"):
-		return str(rustortion_effect.call("get_last_error"))
+	if rustortion_effect != null:
+		return str(rustortion_effect.get_last_error())
 	return "Unknown error"
 
 

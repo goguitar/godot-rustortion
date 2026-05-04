@@ -2,6 +2,7 @@ use std::ffi::c_void;
 use std::slice;
 use std::sync::Arc;
 use std::sync::Once;
+use std::sync::atomic::AtomicU32;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use anyhow::{Context, Result};
@@ -26,10 +27,13 @@ const DEFAULT_BUFFER_FRAMES: usize = 512;
 const MAX_IR_MS: f32 = 35.0;
 const PRESET_CROSSFADE_MS: f32 = 40.0;
 const DEFAULT_OVERSAMPLE_FACTOR: f64 = 8.0;
+const METER_FLOOR_DB: f32 = -70.0;
 
 struct SharedRuntimeState {
     current: ArcSwap<RuntimeConfig>,
     generation: AtomicU64,
+    input_peak_linear_bits: AtomicU32,
+    output_peak_linear_bits: AtomicU32,
 }
 
 impl SharedRuntimeState {
@@ -37,6 +41,8 @@ impl SharedRuntimeState {
         Self {
             current: ArcSwap::from_pointee(RuntimeConfig::default()),
             generation: AtomicU64::new(1),
+            input_peak_linear_bits: AtomicU32::new(0.0f32.to_bits()),
+            output_peak_linear_bits: AtomicU32::new(0.0f32.to_bits()),
         }
     }
 
@@ -51,6 +57,52 @@ impl SharedRuntimeState {
     fn store(&self, config: RuntimeConfig) {
         self.current.store(Arc::new(config));
         self.generation.fetch_add(1, Ordering::AcqRel);
+    }
+
+    fn update_input_peak_linear(&self, peak_linear: f32) {
+        update_peak_linear_max(&self.input_peak_linear_bits, peak_linear);
+    }
+
+    fn update_output_peak_linear(&self, peak_linear: f32) {
+        update_peak_linear_max(&self.output_peak_linear_bits, peak_linear);
+    }
+
+    fn take_input_peak_linear(&self) -> f32 {
+        f32::from_bits(self.input_peak_linear_bits.swap(0.0f32.to_bits(), Ordering::Relaxed))
+    }
+
+    fn take_output_peak_linear(&self) -> f32 {
+        f32::from_bits(self.output_peak_linear_bits.swap(0.0f32.to_bits(), Ordering::Relaxed))
+    }
+}
+
+fn update_peak_linear_max(peak_bits: &AtomicU32, candidate_peak: f32) {
+    if !candidate_peak.is_finite() {
+        return;
+    }
+
+    let candidate = candidate_peak.max(0.0);
+    loop {
+        let current_bits = peak_bits.load(Ordering::Relaxed);
+        let current = f32::from_bits(current_bits);
+        if candidate <= current {
+            break;
+        }
+
+        if peak_bits
+            .compare_exchange_weak(current_bits, candidate.to_bits(), Ordering::Relaxed, Ordering::Relaxed)
+            .is_ok()
+        {
+            break;
+        }
+    }
+}
+
+fn linear_peak_to_db(peak_linear: f32) -> f32 {
+    if peak_linear > 1e-10 {
+        (20.0 * peak_linear.log10()).max(METER_FLOOR_DB)
+    } else {
+        METER_FLOOR_DB
     }
 }
 
@@ -218,6 +270,16 @@ impl AudioEffectRustortion {
     #[func]
     fn get_last_error(&self) -> GString {
         self.last_error.as_str().into()
+    }
+
+    #[func]
+    fn get_input_peak_db(&self) -> f32 {
+        linear_peak_to_db(self.shared.take_input_peak_linear())
+    }
+
+    #[func]
+    fn get_output_peak_db(&self) -> f32 {
+        linear_peak_to_db(self.shared.take_output_peak_linear())
     }
 
     #[func]
@@ -417,9 +479,15 @@ impl AudioEffectRustortionInstance {
     fn process_frames(&mut self, src: &[AudioFrame], dst: &mut [AudioFrame]) -> Result<()> {
         self.ensure_runtime(src.len())?;
 
+        let mut input_peak_linear = 0.0f32;
+
         for (index, frame) in src.iter().enumerate() {
             self.in_left[index] = frame.left;
             self.in_right[index] = frame.right;
+            let frame_peak = frame.left.abs().max(frame.right.abs());
+            if frame_peak > input_peak_linear {
+                input_peak_linear = frame_peak;
+            }
         }
 
         let left = self.left.as_mut().context("left runtime missing")?;
@@ -436,6 +504,7 @@ impl AudioEffectRustortionInstance {
             prev_right.engine.process(&self.in_right, &mut self.prev_out_right)?;
         }
 
+        let mut output_peak_linear = 0.0f32;
         for (index, frame) in dst.iter_mut().enumerate() {
 	            if self.crossfade_remaining_frames > 0 {
 	                let old_weight = self.crossfade_remaining_frames as f32 / self.crossfade_total_frames as f32;
@@ -447,12 +516,20 @@ impl AudioEffectRustortionInstance {
 	                frame.left = self.out_left[index];
 	                frame.right = self.out_right[index];
 	            }
+
+	            let frame_peak = frame.left.abs().max(frame.right.abs());
+	            if frame_peak > output_peak_linear {
+	                output_peak_linear = frame_peak;
+	            }
         }
 
 	        if self.crossfade_remaining_frames == 0 {
 	            self.prev_left = None;
 	            self.prev_right = None;
 	        }
+
+        self.shared.update_input_peak_linear(input_peak_linear);
+        self.shared.update_output_peak_linear(output_peak_linear);
 
         Ok(())
     }
