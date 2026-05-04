@@ -32,6 +32,7 @@ const METER_FLOOR_DB: f32 = -70.0;
 struct SharedRuntimeState {
     current: ArcSwap<RuntimeConfig>,
     generation: AtomicU64,
+    input_trim_db_bits: AtomicU32,
     input_peak_linear_bits: AtomicU32,
     output_peak_linear_bits: AtomicU32,
 }
@@ -41,6 +42,7 @@ impl SharedRuntimeState {
         Self {
             current: ArcSwap::from_pointee(RuntimeConfig::default()),
             generation: AtomicU64::new(1),
+            input_trim_db_bits: AtomicU32::new(0.0f32.to_bits()),
             input_peak_linear_bits: AtomicU32::new(0.0f32.to_bits()),
             output_peak_linear_bits: AtomicU32::new(0.0f32.to_bits()),
         }
@@ -57,6 +59,15 @@ impl SharedRuntimeState {
     fn store(&self, config: RuntimeConfig) {
         self.current.store(Arc::new(config));
         self.generation.fetch_add(1, Ordering::AcqRel);
+    }
+
+    fn set_input_trim_db(&self, input_trim_db: f32) {
+        let value = if input_trim_db.is_finite() { input_trim_db } else { 0.0 };
+        self.input_trim_db_bits.store(value.to_bits(), Ordering::Relaxed);
+    }
+
+    fn input_trim_db(&self) -> f32 {
+        f32::from_bits(self.input_trim_db_bits.load(Ordering::Relaxed))
     }
 
     fn update_input_peak_linear(&self, peak_linear: f32) {
@@ -104,6 +115,10 @@ fn linear_peak_to_db(peak_linear: f32) -> f32 {
     } else {
         METER_FLOOR_DB
     }
+}
+
+fn db_to_linear(gain_db: f32) -> f32 {
+    10.0f32.powf(gain_db / 20.0)
 }
 
 #[derive(Clone, Default)]
@@ -280,6 +295,18 @@ impl AudioEffectRustortion {
     #[func]
     fn get_output_peak_db(&self) -> f32 {
         linear_peak_to_db(self.shared.take_output_peak_linear())
+    }
+
+    #[func]
+    fn set_input_trim_db(&mut self, input_trim_db: f32) -> bool {
+        self.shared.set_input_trim_db(input_trim_db);
+        self.last_error.clear();
+        true
+    }
+
+    #[func]
+    fn get_input_trim_db(&self) -> f32 {
+        self.shared.input_trim_db()
     }
 
     #[func]
@@ -479,12 +506,15 @@ impl AudioEffectRustortionInstance {
     fn process_frames(&mut self, src: &[AudioFrame], dst: &mut [AudioFrame]) -> Result<()> {
         self.ensure_runtime(src.len())?;
 
+        let input_trim_linear = db_to_linear(self.shared.input_trim_db());
         let mut input_peak_linear = 0.0f32;
 
         for (index, frame) in src.iter().enumerate() {
-            self.in_left[index] = frame.left;
-            self.in_right[index] = frame.right;
-            let frame_peak = frame.left.abs().max(frame.right.abs());
+            let trimmed_left = frame.left * input_trim_linear;
+            let trimmed_right = frame.right * input_trim_linear;
+            self.in_left[index] = trimmed_left;
+            self.in_right[index] = trimmed_right;
+            let frame_peak = trimmed_left.abs().max(trimmed_right.abs());
             if frame_peak > input_peak_linear {
                 input_peak_linear = frame_peak;
             }

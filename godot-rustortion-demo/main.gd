@@ -574,13 +574,13 @@ func _setup_gain_knobs() -> void:
 		if treble_knob.has_method("set_value"):
 			treble_knob.call("set_value", treble_value, false)
 
-	_apply_input_bus_gain()
+	_apply_input_trim_db()
 	_apply_live_amp_settings()
 
 
 func set_input_gain(v: float) -> void:
 	input_gain_value = clampf(v, 0.0, 100.0)
-	_apply_input_bus_gain()
+	_apply_input_trim_db()
 
 
 func set_output_gain(v: float) -> void:
@@ -738,11 +738,11 @@ func _extract_output_gain_db(amp_preset: Dictionary) -> float:
 	return 0.0
 
 
-func _apply_input_bus_gain() -> void:
-	if rustortion_bus_idx < 0:
+func _apply_input_trim_db() -> void:
+	if rustortion_effect == null:
 		return
 	var gain_db := _value_to_db(input_gain_value, INPUT_GAIN_MIN_DB, INPUT_GAIN_MAX_DB)
-	AudioServer.set_bus_volume_db(rustortion_bus_idx, gain_db)
+	rustortion_effect.set_input_trim_db(gain_db)
 
 
 func _parse_json_dict(json_text: String) -> Dictionary:
