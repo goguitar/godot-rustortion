@@ -3,6 +3,7 @@ use std::slice;
 use std::sync::Arc;
 use std::sync::Once;
 use std::sync::atomic::AtomicU32;
+use std::sync::atomic::AtomicI32;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use anyhow::{Context, Result};
@@ -28,11 +29,17 @@ const MAX_IR_MS: f32 = 35.0;
 const PRESET_CROSSFADE_MS: f32 = 40.0;
 const DEFAULT_OVERSAMPLE_FACTOR: f64 = 8.0;
 const METER_FLOOR_DB: f32 = -70.0;
+const LIVE_PARAM_SMOOTHING: f32 = 0.22;
 
 struct SharedRuntimeState {
     current: ArcSwap<RuntimeConfig>,
     generation: AtomicU64,
+    tone_stack_stage_idx: AtomicI32,
     input_trim_db_bits: AtomicU32,
+    output_trim_db_bits: AtomicU32,
+    live_bass_bits: AtomicU32,
+    live_mid_bits: AtomicU32,
+    live_treble_bits: AtomicU32,
     input_peak_linear_bits: AtomicU32,
     output_peak_linear_bits: AtomicU32,
 }
@@ -42,7 +49,12 @@ impl SharedRuntimeState {
         Self {
             current: ArcSwap::from_pointee(RuntimeConfig::default()),
             generation: AtomicU64::new(1),
+            tone_stack_stage_idx: AtomicI32::new(-1),
             input_trim_db_bits: AtomicU32::new(0.0f32.to_bits()),
+            output_trim_db_bits: AtomicU32::new(0.0f32.to_bits()),
+            live_bass_bits: AtomicU32::new(1.0f32.to_bits()),
+            live_mid_bits: AtomicU32::new(1.0f32.to_bits()),
+            live_treble_bits: AtomicU32::new(1.0f32.to_bits()),
             input_peak_linear_bits: AtomicU32::new(0.0f32.to_bits()),
             output_peak_linear_bits: AtomicU32::new(0.0f32.to_bits()),
         }
@@ -68,6 +80,39 @@ impl SharedRuntimeState {
 
     fn input_trim_db(&self) -> f32 {
         f32::from_bits(self.input_trim_db_bits.load(Ordering::Relaxed))
+    }
+
+    fn set_output_trim_db(&self, output_trim_db: f32) {
+        let value = if output_trim_db.is_finite() { output_trim_db } else { 0.0 };
+        self.output_trim_db_bits.store(value.to_bits(), Ordering::Relaxed);
+    }
+
+    fn output_trim_db(&self) -> f32 {
+        f32::from_bits(self.output_trim_db_bits.load(Ordering::Relaxed))
+    }
+
+    fn set_live_tonestack(&self, bass: f32, mid: f32, treble: f32) {
+        self.live_bass_bits.store(clamp_tonestack_value(bass).to_bits(), Ordering::Relaxed);
+        self.live_mid_bits.store(clamp_tonestack_value(mid).to_bits(), Ordering::Relaxed);
+        self.live_treble_bits.store(clamp_tonestack_value(treble).to_bits(), Ordering::Relaxed);
+    }
+
+    fn live_tonestack(&self) -> (f32, f32, f32) {
+        (
+            f32::from_bits(self.live_bass_bits.load(Ordering::Relaxed)),
+            f32::from_bits(self.live_mid_bits.load(Ordering::Relaxed)),
+            f32::from_bits(self.live_treble_bits.load(Ordering::Relaxed)),
+        )
+    }
+
+    fn set_tone_stack_stage_idx(&self, idx: Option<usize>) {
+        let value = idx.and_then(|v| i32::try_from(v).ok()).unwrap_or(-1);
+        self.tone_stack_stage_idx.store(value, Ordering::Relaxed);
+    }
+
+    fn tone_stack_stage_idx(&self) -> Option<usize> {
+        let raw = self.tone_stack_stage_idx.load(Ordering::Relaxed);
+        usize::try_from(raw).ok()
     }
 
     fn update_input_peak_linear(&self, peak_linear: f32) {
@@ -117,6 +162,14 @@ fn linear_peak_to_db(peak_linear: f32) -> f32 {
     }
 }
 
+fn clamp_tonestack_value(value: f32) -> f32 {
+    if value.is_finite() {
+        value.clamp(0.0, 2.0)
+    } else {
+        1.0
+    }
+}
+
 fn db_to_linear(gain_db: f32) -> f32 {
     10.0f32.powf(gain_db / 20.0)
 }
@@ -148,6 +201,29 @@ impl RuntimeConfig {
             .as_ref()
             .map(|preset| preset.input_filters)
             .unwrap_or_default()
+    }
+
+    fn first_tonestack_values(&self) -> Option<(f32, f32, f32)> {
+        self.amplifier.as_ref().and_then(|preset| {
+            preset.amp_chain.iter().find_map(|stage| {
+                if let StageConfig::ToneStack(cfg) = stage {
+                    Some((cfg.bass, cfg.mid, cfg.treble))
+                } else {
+                    None
+                }
+            })
+        })
+    }
+
+    fn first_tonestack_stage_index(&self) -> Option<usize> {
+        let preamp_count = self.tone.as_ref().map_or(0, |tone| tone.preamp_chain.len());
+        self.amplifier.as_ref().and_then(|preset| {
+            preset
+                .amp_chain
+                .iter()
+                .position(|stage| matches!(stage, StageConfig::ToneStack(_)))
+                .map(|idx| preamp_count + idx)
+        })
     }
 }
 
@@ -310,6 +386,29 @@ impl AudioEffectRustortion {
     }
 
     #[func]
+    fn set_live_tonestack(&mut self, bass: f32, mid: f32, treble: f32) -> bool {
+        if self.shared.tone_stack_stage_idx().is_none() {
+            self.last_error = "ToneStack stage not available for live control".to_string();
+            return false;
+        }
+        self.shared.set_live_tonestack(bass, mid, treble);
+        self.last_error.clear();
+        true
+    }
+
+    #[func]
+    fn set_output_trim_db(&mut self, output_trim_db: f32) -> bool {
+        self.shared.set_output_trim_db(output_trim_db);
+        self.last_error.clear();
+        true
+    }
+
+    #[func]
+    fn get_output_trim_db(&self) -> f32 {
+        self.shared.output_trim_db()
+    }
+
+    #[func]
     fn load_tone_data(&mut self, json: GString) -> bool {
         self.apply_update(|config| {
             config.tone = Some(TonePresetV1::parse(&json.to_string())?);
@@ -380,6 +479,11 @@ impl AudioEffectRustortion {
         match update(&mut config) {
             Ok(()) => {
                 self.last_error.clear();
+                self.shared
+                    .set_tone_stack_stage_idx(config.first_tonestack_stage_index());
+                if let Some((bass, mid, treble)) = config.first_tonestack_values() {
+                    self.shared.set_live_tonestack(bass, mid, treble);
+                }
                 self.shared.store(config);
                 self.base_mut().emit_changed();
                 true
@@ -412,6 +516,12 @@ pub struct AudioEffectRustortionInstance {
     prev_out_right: Vec<f32>,
     crossfade_total_frames: usize,
     crossfade_remaining_frames: usize,
+    tone_stack_stage_idx: Option<usize>,
+    live_bass: f32,
+    live_mid: f32,
+    live_treble: f32,
+    input_trim_linear: f32,
+    output_trim_linear: f32,
 }
 
 impl AudioEffectRustortionInstance {
@@ -433,6 +543,12 @@ impl AudioEffectRustortionInstance {
             prev_out_right: Vec::new(),
             crossfade_total_frames: 0,
             crossfade_remaining_frames: 0,
+            tone_stack_stage_idx: None,
+            live_bass: 1.0,
+            live_mid: 1.0,
+            live_treble: 1.0,
+            input_trim_linear: 1.0,
+            output_trim_linear: 1.0,
         }
     }
 
@@ -447,6 +563,7 @@ impl AudioEffectRustortionInstance {
             self.crossfade_total_frames = 0;
             self.crossfade_remaining_frames = 0;
             self.applied_generation = 0;
+            self.tone_stack_stage_idx = None;
         }
 
         if let Some(left) = &mut self.left {
@@ -477,6 +594,7 @@ impl AudioEffectRustortionInstance {
         }
 
         let config = self.shared.load();
+        self.tone_stack_stage_idx = config.first_tonestack_stage_index();
 
         let mut next_left = ChannelRuntime::new(self.sample_rate, frame_count.max(DEFAULT_BUFFER_FRAMES))?;
         let mut next_right = ChannelRuntime::new(self.sample_rate, frame_count.max(DEFAULT_BUFFER_FRAMES))?;
@@ -503,15 +621,44 @@ impl AudioEffectRustortionInstance {
         Ok(())
     }
 
+    fn smooth_value(current: f32, target: f32) -> f32 {
+        current + (target - current) * LIVE_PARAM_SMOOTHING
+    }
+
+    fn apply_live_runtime_controls(&mut self) {
+        let (target_bass, target_mid, target_treble) = self.shared.live_tonestack();
+        self.live_bass = Self::smooth_value(self.live_bass, target_bass);
+        self.live_mid = Self::smooth_value(self.live_mid, target_mid);
+        self.live_treble = Self::smooth_value(self.live_treble, target_treble);
+
+        if let Some(stage_idx) = self.tone_stack_stage_idx {
+            if let Some(left) = &self.left {
+                left.handle.set_parameter(stage_idx, "bass", self.live_bass);
+                left.handle.set_parameter(stage_idx, "mid", self.live_mid);
+                left.handle.set_parameter(stage_idx, "treble", self.live_treble);
+            }
+            if let Some(right) = &self.right {
+                right.handle.set_parameter(stage_idx, "bass", self.live_bass);
+                right.handle.set_parameter(stage_idx, "mid", self.live_mid);
+                right.handle.set_parameter(stage_idx, "treble", self.live_treble);
+            }
+        }
+
+        let target_input_trim_linear = db_to_linear(self.shared.input_trim_db());
+        let target_output_trim_linear = db_to_linear(self.shared.output_trim_db());
+        self.input_trim_linear = Self::smooth_value(self.input_trim_linear, target_input_trim_linear);
+        self.output_trim_linear = Self::smooth_value(self.output_trim_linear, target_output_trim_linear);
+    }
+
     fn process_frames(&mut self, src: &[AudioFrame], dst: &mut [AudioFrame]) -> Result<()> {
         self.ensure_runtime(src.len())?;
+        self.apply_live_runtime_controls();
 
-        let input_trim_linear = db_to_linear(self.shared.input_trim_db());
         let mut input_peak_linear = 0.0f32;
 
         for (index, frame) in src.iter().enumerate() {
-            let trimmed_left = frame.left * input_trim_linear;
-            let trimmed_right = frame.right * input_trim_linear;
+            let trimmed_left = frame.left * self.input_trim_linear;
+            let trimmed_right = frame.right * self.input_trim_linear;
             self.in_left[index] = trimmed_left;
             self.in_right[index] = trimmed_right;
             let frame_peak = trimmed_left.abs().max(trimmed_right.abs());
@@ -540,17 +687,20 @@ impl AudioEffectRustortionInstance {
 	                let old_weight = self.crossfade_remaining_frames as f32 / self.crossfade_total_frames as f32;
 	                let new_weight = 1.0 - old_weight;
 	                frame.left = self.prev_out_left[index] * old_weight + self.out_left[index] * new_weight;
-	                frame.right = self.prev_out_right[index] * old_weight + self.out_right[index] * new_weight;
-	                self.crossfade_remaining_frames -= 1;
-	            } else {
-	                frame.left = self.out_left[index];
-	                frame.right = self.out_right[index];
-	            }
+                frame.right = self.prev_out_right[index] * old_weight + self.out_right[index] * new_weight;
+                self.crossfade_remaining_frames -= 1;
+            } else {
+                frame.left = self.out_left[index];
+                frame.right = self.out_right[index];
+            }
 
-	            let frame_peak = frame.left.abs().max(frame.right.abs());
-	            if frame_peak > output_peak_linear {
-	                output_peak_linear = frame_peak;
-	            }
+            frame.left *= self.output_trim_linear;
+            frame.right *= self.output_trim_linear;
+
+            let frame_peak = frame.left.abs().max(frame.right.abs());
+            if frame_peak > output_peak_linear {
+                output_peak_linear = frame_peak;
+            }
         }
 
 	        if self.crossfade_remaining_frames == 0 {

@@ -1,7 +1,7 @@
 [gd_scene load_steps=3 format=3 uid="uid://dirl8px71jydn"]
 
 [ext_resource type="Script" uid="uid://cpud4f8i1qaaa" path="res://ui/knob_meter.gd" id="1"]
-[ext_resource type="Texture2D" uid="uid://cwv7lg128dg3m" path="res://assets/ui/nam/KnobBackground@2x.png" id="2"]
+[ext_resource type="Texture2D" path="res://assets/ui/img/KnobBackground@2x.png" id="2"]
 
 [node name="KnobMeter" type="Control"]
 custom_minimum_size = Vector2(164, 188)

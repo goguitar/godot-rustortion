@@ -1,27 +1,9 @@
-[gd_scene load_steps=6 format=3 uid="uid://dudfqxbbnylvy"]
+[gd_scene load_steps=5 format=3 uid="uid://dudfqxbbnylvy"]
 
 [ext_resource type="Script" uid="uid://d3aksr5nkl7w3" path="res://main.gd" id="1"]
 [ext_resource type="PackedScene" uid="uid://dirl8px71jydn" path="res://ui/knob_meter.tscn" id="2"]
-[ext_resource type="PackedScene" path="res://ui/toggle_button.tscn" id="3"]
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_vu_bg_amp"]
-bg_color = Color(0.105882, 0.113725, 0.109804, 1)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.486275, 0.501961, 0.501961, 1)
-corner_radius_top_left = 3
-corner_radius_top_right = 3
-corner_radius_bottom_right = 3
-corner_radius_bottom_left = 3
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_vu_fill_green"]
-bg_color = Color(0.215686, 0.494118, 0.27451, 1)
-corner_radius_top_left = 3
-corner_radius_top_right = 3
-corner_radius_bottom_right = 3
-corner_radius_bottom_left = 3
+[ext_resource type="PackedScene" uid="uid://n75xhtwdwijl" path="res://ui/toggle_button.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://ui/vu_meter.tscn" id="4"]
 
 [sub_resource type="AudioStreamMicrophone" id="AudioStreamMicrophone_mic"]
 
@@ -114,12 +96,12 @@ theme_override_constants/separation = 12
 [node name="Title" type="Label" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 28
-text = "Guitar Dataset Playback"
+text = "Godot Rustortion"
 horizontal_alignment = 1
 
 [node name="Subtitle" type="Label" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox"]
 layout_mode = 2
-text = "Playback-only demo with pre/post Rustortion VU metering."
+text = "godot-rustortion Amplifier Demonstration"
 horizontal_alignment = 1
 autowrap_mode = 3
 
@@ -143,32 +125,16 @@ layout_mode = 2
 theme_override_constants/separation = 8
 alignment = 2
 
-[node name="PlaybackToggle" type="VBoxContainer" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/PlaybackClipRow/SourceButtonsRow"]
-layout_mode = 2
-theme_override_constants/separation = 2
-
-[node name="PlaybackToggleLabel" type="Label" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/PlaybackClipRow/SourceButtonsRow/PlaybackToggle"]
-layout_mode = 2
-text = "Playback"
-horizontal_alignment = 1
-
-[node name="PlaybackModeButton" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/PlaybackClipRow/SourceButtonsRow/PlaybackToggle" instance=ExtResource("3")]
+[node name="PlaybackModeButton" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/PlaybackClipRow/SourceButtonsRow" instance=ExtResource("3")]
 unique_name_in_owner = true
 layout_mode = 2
+label = "Playback"
 button_pressed = true
 
-[node name="InputToggle" type="VBoxContainer" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/PlaybackClipRow/SourceButtonsRow"]
-layout_mode = 2
-theme_override_constants/separation = 2
-
-[node name="InputToggleLabel" type="Label" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/PlaybackClipRow/SourceButtonsRow/InputToggle"]
-layout_mode = 2
-text = "Input"
-horizontal_alignment = 1
-
-[node name="InputModeButton" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/PlaybackClipRow/SourceButtonsRow/InputToggle" instance=ExtResource("3")]
+[node name="InputModeButton" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/PlaybackClipRow/SourceButtonsRow" instance=ExtResource("3")]
 unique_name_in_owner = true
 layout_mode = 2
+label = "Input"
 
 [node name="CurrentInputLabel" type="Label" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox"]
 unique_name_in_owner = true
@@ -201,32 +167,10 @@ layout_mode = 2
 theme_override_constants/separation = 12
 alignment = 1
 
-[node name="InputVuRow" type="VBoxContainer" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox"]
-layout_mode = 2
-size_flags_horizontal = 4
-theme_override_constants/separation = 6
-alignment = 1
-
-[node name="InputVuLabel" type="Label" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox/InputVuRow"]
-layout_mode = 2
-text = "Input VU"
-horizontal_alignment = 1
-
-[node name="InputVuBar" type="ProgressBar" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox/InputVuRow"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(12, 320)
-layout_mode = 2
-size_flags_horizontal = 4
-theme_override_styles/background = SubResource("StyleBoxFlat_vu_bg_amp")
-theme_override_styles/fill = SubResource("StyleBoxFlat_vu_fill_green")
-fill_mode = 3
-show_percentage = false
-
-[node name="InputVuValueLabel" type="Label" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox/InputVuRow"]
+[node name="InputVuMeter" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox" instance=ExtResource("4")]
 unique_name_in_owner = true
 layout_mode = 2
-text = "-70.0 dB"
-horizontal_alignment = 1
+label = "Input VU"
 
 [node name="KnobsPanel" type="PanelContainer" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox"]
 layout_mode = 2
@@ -309,32 +253,10 @@ value_suffix = " dB"
 display_min = -18.0
 display_max = 18.0
 
-[node name="OutputVuRow" type="VBoxContainer" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox"]
-layout_mode = 2
-size_flags_horizontal = 4
-theme_override_constants/separation = 6
-alignment = 1
-
-[node name="OutputVuLabel" type="Label" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox/OutputVuRow"]
-layout_mode = 2
-text = "Output VU"
-horizontal_alignment = 1
-
-[node name="OutputVuBar" type="ProgressBar" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox/OutputVuRow"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(12, 320)
-layout_mode = 2
-size_flags_horizontal = 4
-theme_override_styles/background = SubResource("StyleBoxFlat_vu_bg_amp")
-theme_override_styles/fill = SubResource("StyleBoxFlat_vu_fill_green")
-fill_mode = 3
-show_percentage = false
-
-[node name="OutputVuValueLabel" type="Label" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox/OutputVuRow"]
+[node name="OutputVuMeter" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox" instance=ExtResource("4")]
 unique_name_in_owner = true
 layout_mode = 2
-text = "-70.0 dB"
-horizontal_alignment = 1
+label = "Output VU"
 
 [node name="PlaybackInputPlayer" type="AudioStreamPlayer" parent="."]
 unique_name_in_owner = true
@@ -347,6 +269,6 @@ bus = &"GuitarMic"
 
 [connection signal="item_selected" from="MarginContainer/RootLayout/RigPanel/RigMargin/RigVBox/RigList" to="." method="_on_rig_list_item_selected"]
 [connection signal="item_selected" from="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/PlaybackClipRow/PlaybackClipOption" to="." method="_on_playback_clip_option_item_selected"]
-[connection signal="pressed" from="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/PlaybackClipRow/SourceButtonsRow/PlaybackToggle/PlaybackModeButton" to="." method="_on_playback_mode_button_pressed"]
-[connection signal="pressed" from="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/PlaybackClipRow/SourceButtonsRow/InputToggle/InputModeButton" to="." method="_on_input_mode_button_pressed"]
+[connection signal="pressed" from="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/PlaybackClipRow/SourceButtonsRow/PlaybackModeButton" to="." method="_on_playback_mode_button_pressed"]
+[connection signal="pressed" from="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/PlaybackClipRow/SourceButtonsRow/InputModeButton" to="." method="_on_input_mode_button_pressed"]
 [connection signal="finished" from="PlaybackInputPlayer" to="." method="_on_playback_input_player_finished"]
