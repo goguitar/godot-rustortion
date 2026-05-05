@@ -114,15 +114,9 @@ jobs:
           cp dist/libs/libgodot_rustortion.dylib godot-rustortion-demo/addons/godot_rustortion/bin/
 
           cp dist/libs/audio_gate/libaudio_gate.linux.release.x86_64.so \
-            godot-rustortion-demo/addons/audio_gate/bin/libaudio_gate.linux.debug.x86_64.so
-          cp dist/libs/audio_gate/libaudio_gate.linux.release.x86_64.so \
             godot-rustortion-demo/addons/audio_gate/bin/libaudio_gate.linux.release.x86_64.so
           cp dist/libs/audio_gate/libaudio_gate.windows.release.x86_64.dll \
-            godot-rustortion-demo/addons/audio_gate/bin/libaudio_gate.windows.debug.x86_64.dll
-          cp dist/libs/audio_gate/libaudio_gate.windows.release.x86_64.dll \
             godot-rustortion-demo/addons/audio_gate/bin/libaudio_gate.windows.release.x86_64.dll
-          cp -R dist/libs/audio_gate/libaudio_gate.macos.release.framework \
-            godot-rustortion-demo/addons/audio_gate/bin/libaudio_gate.macos.debug.framework
           cp -R dist/libs/audio_gate/libaudio_gate.macos.release.framework \
             godot-rustortion-demo/addons/audio_gate/bin/libaudio_gate.macos.release.framework
 
