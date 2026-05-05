@@ -3,6 +3,7 @@ extends Control
 const MIC_BUS_NAME := "GuitarMic"
 const PLAY_BUS_NAME := "GuitarPlay"
 const RUSTORTION_BUS_NAME := "Rustortion"
+const MIC_GATE_EFFECT_NAME := "Gate"
 const SOURCE_PRESET_DIR := "res://assets/rustortion/source_presets"
 const IR_BASE_DIR := "res://assets/rustortion/impulse_responses"
 const PLAYBACK_SOURCE_DIR := "res://assets/rustortion/input_loops/rock_guitar"
@@ -19,6 +20,7 @@ const TONE_MAX := 2.2
 @onready var rustortion_bus_idx := AudioServer.get_bus_index(RUSTORTION_BUS_NAME)
 @onready var rustortion_effect_idx := _lookup_rustortion_effect_index_once(rustortion_bus_idx)
 @onready var rustortion_effect: AudioEffectRustortion = AudioServer.get_bus_effect(rustortion_bus_idx, rustortion_effect_idx) as AudioEffectRustortion
+@onready var mic_gate_effect_idx := _lookup_mic_gate_effect_index_once(mic_bus_idx)
 var active_rig_name := ""
 
 var rigs: Array = []
@@ -58,6 +60,7 @@ func _ready() -> void:
 	assert(rustortion_bus_idx >= 0, "Missing audio bus: %s" % RUSTORTION_BUS_NAME)
 	assert(rustortion_effect_idx >= 0, "Missing Rustortion effect on bus %s" % RUSTORTION_BUS_NAME)
 	assert(rustortion_effect != null, "Rustortion effect on bus %s is not AudioEffectRustortion" % RUSTORTION_BUS_NAME)
+	assert(mic_gate_effect_idx >= 0, "Missing AudioEffectGate named '%s' on bus %s" % [MIC_GATE_EFFECT_NAME, MIC_BUS_NAME])
 	load_rigs()
 	load_playback_stream_list()
 	setup_playback_controls()
@@ -84,6 +87,15 @@ func _lookup_rustortion_effect_index_once(bus_idx: int) -> int:
 	for idx in effect_count:
 		var effect := AudioServer.get_bus_effect(bus_idx, idx)
 		if effect.has_method("set_amp_chain"):
+			return idx
+	return -1
+
+
+func _lookup_mic_gate_effect_index_once(bus_idx: int) -> int:
+	var effect_count := AudioServer.get_bus_effect_count(bus_idx)
+	for idx in effect_count:
+		var effect := AudioServer.get_bus_effect(bus_idx, idx)
+		if effect != null and effect.resource_name == MIC_GATE_EFFECT_NAME and effect.has_method("set_threshold_db"):
 			return idx
 	return -1
 

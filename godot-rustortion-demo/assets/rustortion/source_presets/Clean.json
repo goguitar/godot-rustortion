@@ -14,7 +14,7 @@
     },
     {
       "Preamp": {
-        "gain": 1.1,
+        "gain": 5.1,
         "bias": 1.4901161e-8,
         "clipper_type": "Triode"
       }

@@ -1,3 +1,4 @@
+mod audio_effect_gate;
 mod audio_effect_rustortion;
 
 use godot::prelude::*;
