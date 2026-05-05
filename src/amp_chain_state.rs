@@ -17,7 +17,7 @@ fn default_input_filters() -> VarDictionary {
 }
 
 fn stringify_variant(value: Variant) -> GString {
-    Json::stringify(&value, GString::new(), true, false)
+    Json::stringify(&value)
 }
 
 fn variant_to_f32(value: &Variant, fallback: f32) -> f32 {
@@ -156,7 +156,8 @@ impl AmpChainState {
         stack.set("bass", bass);
         stack.set("mid", mid);
         stack.set("treble", treble);
-        stage.set("ToneStack", stack);
+        let stack_variant = stack.to_variant();
+        stage.set("ToneStack", &stack_variant);
 
         self.set_stage_entry(stage_idx, stage);
         true
@@ -177,7 +178,8 @@ impl AmpChainState {
             .and_then(|value| value.try_to::<VarDictionary>().ok())
             .unwrap_or_else(VarDictionary::new);
         level.set("gain", gain);
-        stage.set("Level", level);
+        let level_variant = level.to_variant();
+        stage.set("Level", &level_variant);
 
         self.set_stage_entry(stage_idx, stage);
         true
@@ -272,11 +274,11 @@ impl AmpChainState {
         if stage.is_empty() {
             return GString::from("Unknown");
         }
-        let keys = stage.keys();
-        if keys.is_empty() {
+        let mut keys = stage.keys_shared();
+        let Some(key) = keys.next() else {
             return GString::from("Unknown");
-        }
-        keys.at(0).try_to::<GString>().unwrap_or_else(|_| GString::from("Unknown"))
+        };
+        key.try_to::<GString>().unwrap_or_else(|_| GString::from("Unknown"))
     }
 }
 

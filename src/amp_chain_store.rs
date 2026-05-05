@@ -57,19 +57,21 @@ impl AmpChainStore {
             return VarDictionary::new();
         };
 
-        let Some(file) = FileAccess::open(path.clone(), ModeFlags::READ) else {
+        let path_str = path.to_string();
+        let Some(file) = FileAccess::open(path_str.as_str(), ModeFlags::READ) else {
             self.set_error(format!(
                 "Failed to open preset '{}': {:?}",
-                path,
+                path_str,
                 FileAccess::get_open_error()
             ));
             return VarDictionary::new();
         };
 
-        let json_text = file.get_as_text(false);
-        let parsed = Json::parse_string(json_text);
+        let json_text = file.get_as_text();
+        let json_text_str = json_text.to_string();
+        let parsed = Json::parse_string(json_text_str.as_str());
         if parsed.get_type() != VariantType::DICTIONARY {
-            self.set_error(format!("Preset '{}' did not parse as dictionary", path));
+            self.set_error(format!("Preset '{}' did not parse as dictionary", path_str));
             return VarDictionary::new();
         }
 
@@ -79,7 +81,7 @@ impl AmpChainStore {
                 dict
             }
             Err(err) => {
-                self.set_error(format!("Preset '{}' failed to convert: {err}", path));
+                self.set_error(format!("Preset '{}' failed to convert: {err}", path_str));
                 VarDictionary::new()
             }
         }
@@ -91,25 +93,27 @@ impl AmpChainStore {
             return false;
         };
 
-        let json_text = Json::stringify(&preset.to_variant(), GString::new(), true, false);
-        let Some(mut file) = FileAccess::open(path.clone(), ModeFlags::WRITE) else {
+        let json_text = Json::stringify(&preset.to_variant());
+        let path_str = path.to_string();
+        let Some(mut file) = FileAccess::open(path_str.as_str(), ModeFlags::WRITE) else {
             self.set_error(format!(
                 "Failed to open preset '{}' for writing: {:?}",
-                path,
+                path_str,
                 FileAccess::get_open_error()
             ));
             return false;
         };
 
-        file.store_string(json_text);
+        let json_text_str = json_text.to_string();
+        file.store_string(json_text_str.as_str());
         self.clear_error();
         true
     }
 }
 
 impl AmpChainStore {
-    fn set_error(&mut self, message: impl Into<GString>) {
-        self.last_error = message.into();
+    fn set_error(&mut self, message: impl AsRef<str>) {
+        self.last_error = GString::from(message.as_ref());
     }
 
     fn clear_error(&mut self) {
@@ -122,8 +126,9 @@ impl AmpChainStore {
             return None;
         }
 
-        let Some(dir) = DirAccess::open(self.preset_dir.clone()) else {
-            self.set_error(format!("Failed to open preset directory '{}'", self.preset_dir));
+        let dir_path = self.preset_dir.to_string();
+        let Some(dir) = DirAccess::open(dir_path.as_str()) else {
+            self.set_error(format!("Failed to open preset directory '{}'", dir_path));
             return None;
         };
         Some(dir)
@@ -142,7 +147,7 @@ impl AmpChainStore {
         }
 
         if file_name.contains("://") {
-            return Some(file_name.into());
+            return Some(GString::from(file_name.as_str()));
         }
 
         if self.preset_dir.is_empty() {
@@ -151,6 +156,7 @@ impl AmpChainStore {
         }
 
         let base = self.preset_dir.to_string();
-        Some(format!("{}/{}", base.trim_end_matches('/'), file_name).into())
+        let resolved = format!("{}/{}", base.trim_end_matches('/'), file_name);
+        Some(GString::from(resolved.as_str()))
     }
 }
