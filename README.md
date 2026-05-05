@@ -20,6 +20,14 @@ It is designed for guitar-style real-time processing with a simple data-driven A
 - `rustortion/` — `rustortion-core` submodule
 - `godot-rustortion-demo/` — demo project using live input and preset lists
 
+## Development
+
+Initialize the rustortion submodule before building:
+
+```bash
+git submodule update --init --recursive
+```
+
 ## Demo
 
 ![Demo Scene](screenshots/demo_scene.png)

@@ -34,6 +34,12 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Initialize submodules
+        shell: bash
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --recursive
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 

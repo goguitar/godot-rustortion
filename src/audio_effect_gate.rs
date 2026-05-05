@@ -109,37 +109,21 @@ fn sanitize_time_ms(time_ms: f32, default_ms: f32) -> f32 {
 pub struct AudioEffectGate {
     #[init(val = Arc::new(GateParams::new()))]
     shared: Arc<GateParams>,
-    #[var(
-        get = "get_threshold_db",
-        set = "set_threshold_db",
-        default = -50.0,
-        hint = "range",
-        hint_string = "-100,0,0.01,suffix:dB"
-    )]
+    #[export]
+    #[var(get = get_threshold_db, set = set_threshold_db)]
+    #[init(val = DEFAULT_THRESHOLD_DB)]
     threshold_db: f32,
-    #[var(
-        get = "get_attack_ms",
-        set = "set_attack_ms",
-        default = 5.0,
-        hint = "range",
-        hint_string = "1,2000,1,suffix:ms"
-    )]
+    #[export]
+    #[var(get = get_attack_ms, set = set_attack_ms)]
+    #[init(val = DEFAULT_ATTACK_MS)]
     attack_ms: f32,
-    #[var(
-        get = "get_hold_ms",
-        set = "set_hold_ms",
-        default = 100.0,
-        hint = "range",
-        hint_string = "1,2000,1,suffix:ms"
-    )]
+    #[export]
+    #[var(get = get_hold_ms, set = set_hold_ms)]
+    #[init(val = DEFAULT_HOLD_MS)]
     hold_ms: f32,
-    #[var(
-        get = "get_release_ms",
-        set = "set_release_ms",
-        default = 50.0,
-        hint = "range",
-        hint_string = "1,2000,1,suffix:ms"
-    )]
+    #[export]
+    #[var(get = get_release_ms, set = set_release_ms)]
+    #[init(val = DEFAULT_RELEASE_MS)]
     release_ms: f32,
     base: Base<AudioEffect>,
 }
