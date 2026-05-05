@@ -26,6 +26,7 @@ fn linear_to_db(linear: f32) -> f32 {
     }
 }
 
+#[allow(dead_code)]
 fn db_to_linear(db: f32) -> f32 {
     10.0f32.powf(db / 20.0)
 }
@@ -65,7 +66,6 @@ impl GateParams {
 
     fn set_threshold_db(&self, threshold_db: f32) -> f32 {
         let value = sanitize_threshold_db(threshold_db);
-        let _ = db_to_linear(value);
         self.threshold_db_bits.store(value.to_bits(), Ordering::Relaxed);
         value
     }
