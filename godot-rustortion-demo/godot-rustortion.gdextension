@@ -5,3 +5,5 @@ compatibility_minimum = "4.5"
 [libraries]
 linux.debug.x86_64 = "res://libgodot_rustortion.so"
 linux.release.x86_64 = "res://libgodot_rustortion.so"
+windows.debug.x86_64 = "res://godot_rustortion.dll"
+windows.release.x86_64 = "res://godot_rustortion.dll"
