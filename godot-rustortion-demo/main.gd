@@ -265,6 +265,7 @@ func update_vu_meters(_delta: float) -> void:
 	if output_vu_meter != null:
 		output_vu_meter.set_peak_db(output_meter_db)
 
+
 func _smooth_meter_db(current_db: float, target_db: float) -> float:
 	target_db = maxf(target_db, MIN_METER_DB)
 	if target_db > current_db:
@@ -435,6 +436,8 @@ func _value_to_db(v: float, min_db: float, max_db: float) -> float:
 func _db_to_value(gain_db: float, min_db: float, max_db: float) -> float:
 	var norm := clampf((gain_db - min_db) / (max_db - min_db), 0.0, 1.0)
 	return norm * 100.0
+
+
 func _apply_input_trim_db() -> void:
 	var gain_db := _value_to_db(input_gain_value, INPUT_GAIN_MIN_DB, INPUT_GAIN_MAX_DB)
 	rustortion_effect.set_input_trim_db(gain_db)
