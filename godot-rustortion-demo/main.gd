@@ -33,6 +33,7 @@ var middle_value := 5.0
 var treble_value := 5.0
 
 var amp_chain_state := AmpChainState.new()
+var amp_chain_store := AmpChainStore.new()
 var input_meter_db := MIN_METER_DB
 var output_meter_db := MIN_METER_DB
 
@@ -61,6 +62,8 @@ func _ready() -> void:
 	assert(rustortion_effect_idx >= 0, "Missing Rustortion effect on bus %s" % RUSTORTION_BUS_NAME)
 	assert(rustortion_effect != null, "Rustortion effect on bus %s is not AudioEffectRustortion" % RUSTORTION_BUS_NAME)
 	assert(mic_gate_effect_idx >= 0, "Missing AudioEffectGate named '%s' on bus %s" % [MIC_GATE_EFFECT_NAME, MIC_BUS_NAME])
+	if not amp_chain_store.set_preset_dir(SOURCE_PRESET_DIR):
+		push_warning("Failed to set preset directory: %s" % amp_chain_store.get_last_error())
 	load_rigs()
 	load_playback_stream_list()
 	setup_playback_controls()
@@ -111,15 +114,24 @@ func load_rigs() -> void:
 
 
 func load_source_presets() -> void:
-	for file_name in sorted_json_files(SOURCE_PRESET_DIR):
-		var path := "%s/%s" % [SOURCE_PRESET_DIR, file_name]
-		var preset := load_json_dict(path)
+	var preset_files := amp_chain_store.list_presets()
+	if preset_files.is_empty():
+		var store_error := amp_chain_store.get_last_error()
+		if store_error != "":
+			push_warning("Failed to list source presets: %s" % store_error)
+		return
+
+	for file_name in preset_files:
+		var preset := amp_chain_store.load_preset(file_name)
 		if preset.is_empty():
+			var store_error := amp_chain_store.get_last_error()
+			if store_error != "":
+				push_warning("Skipping source preset (%s): %s" % [file_name, store_error])
 			continue
 
 		var payload := _build_source_payload(preset)
 		if payload.is_empty():
-			push_warning("Skipping source preset (invalid payload): %s" % path)
+			push_warning("Skipping source preset (invalid payload): %s" % file_name)
 			continue
 
 		rigs.append({
