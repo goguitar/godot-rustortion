@@ -8,24 +8,14 @@ use godot::classes::{AudioEffect, AudioEffectInstance, AudioServer, IAudioEffect
 use godot::meta::conv::RawPtr;
 use godot::prelude::*;
 
-const DEFAULT_THRESHOLD_DB: f32 = -50.0;
-const DEFAULT_ATTACK_MS: f32 = 5.0;
-const DEFAULT_HOLD_MS: f32 = 100.0;
-const DEFAULT_RELEASE_MS: f32 = 50.0;
+const DEFAULT_THRESHOLD_DB: f32 = -48.0;
+const DEFAULT_ATTACK_MS: f32 = 8.0;
+const DEFAULT_HOLD_MS: f32 = 120.0;
+const DEFAULT_RELEASE_MS: f32 = 140.0;
 const MIN_THRESHOLD_DB: f32 = -100.0;
 const MAX_THRESHOLD_DB: f32 = 0.0;
 const MIN_TIME_MS: f32 = 1.0;
 const MAX_TIME_MS: f32 = 2000.0;
-const LINEAR_DB_FLOOR: f32 = -80.0;
-
-fn linear_to_db(linear: f32) -> f32 {
-    if linear <= 0.0 {
-        LINEAR_DB_FLOOR
-    } else {
-        20.0 * linear.log10()
-    }
-}
-
 fn db_to_linear(db: f32) -> f32 {
     10.0f32.powf(db / 20.0)
 }
@@ -217,8 +207,7 @@ pub struct AudioEffectGateInstance {
     shared: Arc<GateParams>,
     gate_state: GateState,
     last_envelope_value: f32,
-    samples_since_below_threshold: u32,
-    below_threshold: bool,
+    hold_samples_elapsed: u32,
 }
 
 impl AudioEffectGateInstance {
@@ -228,8 +217,7 @@ impl AudioEffectGateInstance {
             shared,
             gate_state: GateState::Closed,
             last_envelope_value: 0.0,
-            samples_since_below_threshold: 0,
-            below_threshold: true,
+            hold_samples_elapsed: 0,
         }
     }
 
@@ -239,52 +227,49 @@ impl AudioEffectGateInstance {
         }
 
         let sample_rate = AudioServer::singleton().get_mix_rate().max(1.0);
-        let mut signal_total_l_sqr = 0.0f32;
-        let mut signal_total_r_sqr = 0.0f32;
-
-        for frame in src {
-            signal_total_l_sqr += frame.left * frame.left;
-            signal_total_r_sqr += frame.right * frame.right;
-        }
-
-        let frame_count = src.len() as f32;
-        let rms_l = (signal_total_l_sqr / frame_count).sqrt();
-        let rms_r = (signal_total_r_sqr / frame_count).sqrt();
-        let rms = rms_l.max(rms_r);
-        let db_rms = linear_to_db(rms);
-
         let threshold_db = self.shared.threshold_db();
         let threshold_linear = db_to_linear(threshold_db);
-        let now_below_threshold = db_rms < threshold_db && rms < threshold_linear;
-
-        if now_below_threshold && !self.below_threshold {
-            if self.gate_state == GateState::Attack {
-                self.gate_state = GateState::Release;
-            } else {
-                self.gate_state = GateState::Hold;
-                self.samples_since_below_threshold = 0;
-            }
-        } else if !now_below_threshold && self.below_threshold {
-            if self.gate_state == GateState::Hold {
-                self.gate_state = GateState::Open;
-                self.samples_since_below_threshold = 0;
-            } else {
-                self.gate_state = GateState::Attack;
-            }
-        }
+        let hold_ms = self.shared.hold_ms().max(MIN_TIME_MS);
+        let hold_samples = ((sample_rate * hold_ms) / 1000.0).max(1.0) as u32;
 
         for (index, frame) in src.iter().enumerate() {
+            let level = frame.left.abs().max(frame.right.abs());
+            if level >= threshold_linear {
+                self.hold_samples_elapsed = 0;
+                match self.gate_state {
+                    GateState::Closed | GateState::Release | GateState::Hold => {
+                        self.gate_state = GateState::Attack;
+                    }
+                    GateState::Attack | GateState::Open => {}
+                }
+            } else {
+                match self.gate_state {
+                    GateState::Attack => {
+                        self.gate_state = GateState::Release;
+                    }
+                    GateState::Open => {
+                        self.gate_state = GateState::Hold;
+                        self.hold_samples_elapsed = 0;
+                    }
+                    GateState::Hold => {
+                        self.hold_samples_elapsed = self.hold_samples_elapsed.saturating_add(1);
+                        if self.hold_samples_elapsed >= hold_samples {
+                            self.gate_state = GateState::Release;
+                            self.hold_samples_elapsed = 0;
+                        }
+                    }
+                    GateState::Release | GateState::Closed => {}
+                }
+            }
+
             let envelope = self.next_envelope_value(sample_rate);
             dst[index].left = frame.left * envelope;
             dst[index].right = frame.right * envelope;
         }
-
-        self.below_threshold = now_below_threshold;
     }
 
     fn next_envelope_value(&mut self, sample_rate: f32) -> f32 {
         let attack_ms = self.shared.attack_ms().max(MIN_TIME_MS);
-        let hold_ms = self.shared.hold_ms().max(MIN_TIME_MS);
         let release_ms = self.shared.release_ms().max(MIN_TIME_MS);
         let sample_rate = sample_rate.max(1.0);
 
@@ -294,14 +279,7 @@ impl AudioEffectGateInstance {
                 self.last_envelope_value + (1000.0 / sample_rate / attack_ms)
             }
             GateState::Open => 1.0,
-            GateState::Hold => {
-                self.samples_since_below_threshold = self.samples_since_below_threshold.saturating_add(1);
-                if self.samples_since_below_threshold == u32::MAX {
-                    self.gate_state = GateState::Release;
-                    self.samples_since_below_threshold = 0;
-                }
-                1.0
-            }
+            GateState::Hold => 1.0,
             GateState::Release => {
                 self.last_envelope_value - (1000.0 / sample_rate / release_ms)
             }
@@ -310,11 +288,6 @@ impl AudioEffectGateInstance {
         if self.gate_state == GateState::Attack && next_env_value >= 1.0 {
             self.gate_state = GateState::Open;
             next_env_value = 1.0;
-        } else if self.gate_state == GateState::Hold
-            && (1000.0 * self.samples_since_below_threshold as f32) / sample_rate >= hold_ms
-        {
-            self.gate_state = GateState::Release;
-            self.samples_since_below_threshold = 0;
         } else if self.gate_state == GateState::Release && next_env_value <= 0.0 {
             self.gate_state = GateState::Closed;
             next_env_value = 0.0;
