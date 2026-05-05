@@ -1,12 +1,12 @@
 use std::ffi::c_void;
 use std::slice;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::Once;
 use std::sync::atomic::AtomicU32;
-use std::sync::atomic::AtomicI32;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use arc_swap::ArcSwap;
 use godot::classes::native::AudioFrame;
 use godot::classes::{AudioEffect, AudioEffectInstance, AudioServer, IAudioEffect, IAudioEffectInstance};
@@ -21,27 +21,28 @@ use rustortion_core::ir::convolver::Convolver;
 use rustortion_core::ir::loader::IrLoader;
 use rustortion_core::preset::{InputFilterConfig, StageConfig};
 
-use crate::preset_types::{AmplifierPresetV1, TonePresetV1};
-
 static PREWARM_CLIPPER_TABLES: Once = Once::new();
 const DEFAULT_BUFFER_FRAMES: usize = 512;
 const MAX_IR_MS: f32 = 35.0;
 const PRESET_CROSSFADE_MS: f32 = 40.0;
 const DEFAULT_OVERSAMPLE_FACTOR: f64 = 8.0;
 const METER_FLOOR_DB: f32 = -70.0;
-const LIVE_PARAM_SMOOTHING: f32 = 0.22;
+const INPUT_TRIM_SMOOTHING: f32 = 0.22;
 
 struct SharedRuntimeState {
     current: ArcSwap<RuntimeConfig>,
     generation: AtomicU64,
-    tone_stack_stage_idx: AtomicI32,
     input_trim_db_bits: AtomicU32,
-    output_trim_db_bits: AtomicU32,
-    live_bass_bits: AtomicU32,
-    live_mid_bits: AtomicU32,
-    live_treble_bits: AtomicU32,
+    pending_param_updates: Mutex<Vec<PendingParamUpdate>>,
     input_peak_linear_bits: AtomicU32,
     output_peak_linear_bits: AtomicU32,
+}
+
+#[derive(Clone, Copy)]
+struct PendingParamUpdate {
+    stage_idx: usize,
+    name: &'static str,
+    value: f32,
 }
 
 impl SharedRuntimeState {
@@ -49,12 +50,8 @@ impl SharedRuntimeState {
         Self {
             current: ArcSwap::from_pointee(RuntimeConfig::default()),
             generation: AtomicU64::new(1),
-            tone_stack_stage_idx: AtomicI32::new(-1),
             input_trim_db_bits: AtomicU32::new(0.0f32.to_bits()),
-            output_trim_db_bits: AtomicU32::new(0.0f32.to_bits()),
-            live_bass_bits: AtomicU32::new(1.0f32.to_bits()),
-            live_mid_bits: AtomicU32::new(1.0f32.to_bits()),
-            live_treble_bits: AtomicU32::new(1.0f32.to_bits()),
+            pending_param_updates: Mutex::new(Vec::new()),
             input_peak_linear_bits: AtomicU32::new(0.0f32.to_bits()),
             output_peak_linear_bits: AtomicU32::new(0.0f32.to_bits()),
         }
@@ -82,37 +79,17 @@ impl SharedRuntimeState {
         f32::from_bits(self.input_trim_db_bits.load(Ordering::Relaxed))
     }
 
-    fn set_output_trim_db(&self, output_trim_db: f32) {
-        let value = if output_trim_db.is_finite() { output_trim_db } else { 0.0 };
-        self.output_trim_db_bits.store(value.to_bits(), Ordering::Relaxed);
+    fn enqueue_param_update(&self, update: PendingParamUpdate) {
+        if let Ok(mut queue) = self.pending_param_updates.lock() {
+            queue.push(update);
+        }
     }
 
-    fn output_trim_db(&self) -> f32 {
-        f32::from_bits(self.output_trim_db_bits.load(Ordering::Relaxed))
-    }
-
-    fn set_live_tonestack(&self, bass: f32, mid: f32, treble: f32) {
-        self.live_bass_bits.store(clamp_tonestack_value(bass).to_bits(), Ordering::Relaxed);
-        self.live_mid_bits.store(clamp_tonestack_value(mid).to_bits(), Ordering::Relaxed);
-        self.live_treble_bits.store(clamp_tonestack_value(treble).to_bits(), Ordering::Relaxed);
-    }
-
-    fn live_tonestack(&self) -> (f32, f32, f32) {
-        (
-            f32::from_bits(self.live_bass_bits.load(Ordering::Relaxed)),
-            f32::from_bits(self.live_mid_bits.load(Ordering::Relaxed)),
-            f32::from_bits(self.live_treble_bits.load(Ordering::Relaxed)),
-        )
-    }
-
-    fn set_tone_stack_stage_idx(&self, idx: Option<usize>) {
-        let value = idx.and_then(|v| i32::try_from(v).ok()).unwrap_or(-1);
-        self.tone_stack_stage_idx.store(value, Ordering::Relaxed);
-    }
-
-    fn tone_stack_stage_idx(&self) -> Option<usize> {
-        let raw = self.tone_stack_stage_idx.load(Ordering::Relaxed);
-        usize::try_from(raw).ok()
+    fn take_param_updates(&self) -> Vec<PendingParamUpdate> {
+        if let Ok(mut queue) = self.pending_param_updates.lock() {
+            return queue.drain(..).collect();
+        }
+        Vec::new()
     }
 
     fn update_input_peak_linear(&self, peak_linear: f32) {
@@ -162,68 +139,20 @@ fn linear_peak_to_db(peak_linear: f32) -> f32 {
     }
 }
 
-fn clamp_tonestack_value(value: f32) -> f32 {
-    if value.is_finite() {
-        value.clamp(0.0, 2.0)
-    } else {
-        1.0
-    }
-}
-
 fn db_to_linear(gain_db: f32) -> f32 {
     10.0f32.powf(gain_db / 20.0)
 }
 
 #[derive(Clone, Default)]
 struct RuntimeConfig {
-    tone: Option<TonePresetV1>,
-    amplifier: Option<AmplifierPresetV1>,
+    stages: Vec<StageConfig>,
+    input_filters: InputFilterConfig,
     ir: Option<IrPayload>,
 }
 
 impl RuntimeConfig {
-    fn merged_stages(&self) -> Vec<StageConfig> {
-        let mut stages = Vec::new();
-
-        if let Some(tone) = &self.tone {
-            stages.extend(tone.preamp_stages());
-        }
-
-        if let Some(amplifier) = &self.amplifier {
-            stages.extend(amplifier.amp_chain.iter().cloned());
-        }
-
-        stages
-    }
-
-    fn input_filters(&self) -> InputFilterConfig {
-        self.amplifier
-            .as_ref()
-            .map(|preset| preset.input_filters)
-            .unwrap_or_default()
-    }
-
-    fn first_tonestack_values(&self) -> Option<(f32, f32, f32)> {
-        self.amplifier.as_ref().and_then(|preset| {
-            preset.amp_chain.iter().find_map(|stage| {
-                if let StageConfig::ToneStack(cfg) = stage {
-                    Some((cfg.bass, cfg.mid, cfg.treble))
-                } else {
-                    None
-                }
-            })
-        })
-    }
-
-    fn first_tonestack_stage_index(&self) -> Option<usize> {
-        let preamp_count = self.tone.as_ref().map_or(0, |tone| tone.preamp_chain.len());
-        self.amplifier.as_ref().and_then(|preset| {
-            preset
-                .amp_chain
-                .iter()
-                .position(|stage| matches!(stage, StageConfig::ToneStack(_)))
-                .map(|idx| preamp_count + idx)
-        })
+    fn stages(&self) -> &[StageConfig] {
+        &self.stages
     }
 }
 
@@ -262,9 +191,9 @@ impl ChannelRuntime {
 
     fn apply_config(&self, config: &RuntimeConfig) {
         let mut chain = AmplifierChain::new();
-        let stages = config.merged_stages();
+        let stages = config.stages();
 
-        for stage in &stages {
+        for stage in stages {
             chain.add_stage(stage.to_runtime(self.sample_rate));
         }
 
@@ -275,7 +204,7 @@ impl ChannelRuntime {
         }
 
         self.handle.set_amp_chain(chain);
-        let filters = config.input_filters();
+        let filters = config.input_filters;
         self.handle.set_input_filters(
             make_filter_stage(filters.hp_enabled, FilterType::Highpass, filters.hp_cutoff, self.sample_rate),
             make_filter_stage(filters.lp_enabled, FilterType::Lowpass, filters.lp_cutoff, self.sample_rate),
@@ -386,74 +315,110 @@ impl AudioEffectRustortion {
     }
 
     #[func]
-    fn set_live_tonestack(&mut self, bass: f32, mid: f32, treble: f32) -> bool {
-        if self.shared.tone_stack_stage_idx().is_none() {
-            self.last_error = "ToneStack stage not available for live control".to_string();
+    fn set_amp_chain(&mut self, stages_json: GString, input_filters_json: GString) -> bool {
+        self.apply_update(|config| {
+            config.stages = parse_stages_json(&stages_json.to_string())?;
+            config.input_filters = parse_input_filters_json(&input_filters_json.to_string())?;
+            Ok(())
+        })
+    }
+
+    #[func]
+    fn set_ir_data(&mut self, ir_name: GString, ir_bytes: PackedByteArray, ir_gain: f32) -> bool {
+        self.apply_update(|config| {
+            let payload = decode_ir_payload(ir_name.to_string(), ir_bytes.as_slice(), ir_gain)?;
+            config.ir = Some(payload);
+            Ok(())
+        })
+    }
+
+    #[func]
+    fn set_stage_parameter(&mut self, stage_idx: i32, name: GString, value: f32) -> bool {
+        let idx = match usize::try_from(stage_idx) {
+            Ok(idx) => idx,
+            Err(_) => {
+                self.last_error = "stage index must be >= 0".to_string();
+                return false;
+            }
+        };
+
+        let config = self.shared.load();
+        let Some(stage) = config.stages.get(idx) else {
+            self.last_error = format!("stage index {idx} out of range");
             return false;
-        }
-        self.shared.set_live_tonestack(bass, mid, treble);
+        };
+
+        let stage_name = name.to_string();
+        let (mapped_name, mapped_value) = match validate_stage_parameter(stage, &stage_name, value) {
+            Ok(mapped) => mapped,
+            Err(err) => {
+                self.last_error = err.to_string();
+                return false;
+            }
+        };
+
+        self.shared.enqueue_param_update(PendingParamUpdate {
+            stage_idx: idx,
+            name: mapped_name,
+            value: mapped_value,
+        });
         self.last_error.clear();
         true
     }
 
     #[func]
-    fn set_output_trim_db(&mut self, output_trim_db: f32) -> bool {
-        self.shared.set_output_trim_db(output_trim_db);
-        self.last_error.clear();
-        true
-    }
-
-    #[func]
-    fn get_output_trim_db(&self) -> f32 {
-        self.shared.output_trim_db()
-    }
-
-    #[func]
-    fn load_tone_data(&mut self, json: GString) -> bool {
+    fn add_stage(&mut self, parent_stage_idx: i32, stage_json: GString, insert_after: bool) -> bool {
         self.apply_update(|config| {
-            config.tone = Some(TonePresetV1::parse(&json.to_string())?);
+            let stage = parse_stage_json(&stage_json.to_string())?;
+            if parent_stage_idx == -1 {
+                config.stages.push(stage);
+                return Ok(());
+            }
+
+            let parent_idx = usize::try_from(parent_stage_idx).context("parent_stage_idx must be >= -1")?;
+            if parent_idx >= config.stages.len() {
+                bail!("parent stage index {parent_idx} out of range");
+            }
+
+            let insert_idx = if insert_after { parent_idx + 1 } else { parent_idx };
+            config.stages.insert(insert_idx, stage);
             Ok(())
         })
     }
 
     #[func]
-    fn load_amp_data(&mut self, json: GString) -> bool {
+    fn remove_stage(&mut self, stage_idx: i32) -> bool {
         self.apply_update(|config| {
-            config.amplifier = Some(AmplifierPresetV1::parse(&json.to_string())?);
+            let idx = usize::try_from(stage_idx).context("stage index must be >= 0")?;
+            if idx >= config.stages.len() {
+                bail!("stage index {idx} out of range");
+            }
+            config.stages.remove(idx);
             Ok(())
         })
     }
 
     #[func]
-    fn load_amp_and_ir_data(
-        &mut self,
-        amplifier_json: GString,
-        ir_name: GString,
-        ir_bytes: PackedByteArray,
-        ir_gain: f32,
-    ) -> bool {
+    fn swap_stages(&mut self, stage_a: i32, stage_b: i32) -> bool {
         self.apply_update(|config| {
-            config.amplifier = Some(AmplifierPresetV1::parse(&amplifier_json.to_string())?);
-            let payload = decode_ir_payload(ir_name.to_string(), ir_bytes.as_slice(), ir_gain)?;
-            config.ir = Some(payload);
+            let a = usize::try_from(stage_a).context("stage_a must be >= 0")?;
+            let b = usize::try_from(stage_b).context("stage_b must be >= 0")?;
+            if a >= config.stages.len() || b >= config.stages.len() {
+                bail!("swap indexes out of range: {a}, {b}");
+            }
+            config.stages.swap(a, b);
             Ok(())
         })
     }
 
     #[func]
-    fn load_amp_tone_and_ir_data(
-        &mut self,
-        amplifier_json: GString,
-        tone_json: GString,
-        ir_name: GString,
-        ir_bytes: PackedByteArray,
-        ir_gain: f32,
-    ) -> bool {
+    fn rebuild_stage(&mut self, stage_idx: i32, stage_json: GString) -> bool {
         self.apply_update(|config| {
-            config.amplifier = Some(AmplifierPresetV1::parse(&amplifier_json.to_string())?);
-            config.tone = Some(TonePresetV1::parse(&tone_json.to_string())?);
-            let payload = decode_ir_payload(ir_name.to_string(), ir_bytes.as_slice(), ir_gain)?;
-            config.ir = Some(payload);
+            let idx = usize::try_from(stage_idx).context("stage index must be >= 0")?;
+            if idx >= config.stages.len() {
+                bail!("stage index {idx} out of range");
+            }
+            config.stages[idx] = parse_stage_json(&stage_json.to_string())?;
             Ok(())
         })
     }
@@ -461,8 +426,8 @@ impl AudioEffectRustortion {
     #[func]
     fn clear_data(&mut self) -> bool {
         self.apply_update(|config| {
-            config.tone = None;
-            config.amplifier = None;
+            config.stages.clear();
+            config.input_filters = InputFilterConfig::default();
             config.ir = None;
             Ok(())
         })
@@ -479,11 +444,6 @@ impl AudioEffectRustortion {
         match update(&mut config) {
             Ok(()) => {
                 self.last_error.clear();
-                self.shared
-                    .set_tone_stack_stage_idx(config.first_tonestack_stage_index());
-                if let Some((bass, mid, treble)) = config.first_tonestack_values() {
-                    self.shared.set_live_tonestack(bass, mid, treble);
-                }
                 self.shared.store(config);
                 self.base_mut().emit_changed();
                 true
@@ -494,6 +454,43 @@ impl AudioEffectRustortion {
                 false
             }
         }
+    }
+}
+
+fn parse_stages_json(json: &str) -> Result<Vec<StageConfig>> {
+    let stages: Vec<StageConfig> = serde_json::from_str(json).context("failed to parse stages JSON")?;
+    Ok(stages)
+}
+
+fn parse_stage_json(json: &str) -> Result<StageConfig> {
+    let stage: StageConfig = serde_json::from_str(json).context("failed to parse stage JSON")?;
+    Ok(stage)
+}
+
+fn parse_input_filters_json(json: &str) -> Result<InputFilterConfig> {
+    let filters: InputFilterConfig =
+        serde_json::from_str(json).context("failed to parse input filters JSON")?;
+    Ok(filters)
+}
+
+fn validate_stage_parameter(stage: &StageConfig, name: &str, value: f32) -> Result<(&'static str, f32)> {
+    if !value.is_finite() {
+        bail!("parameter value must be finite");
+    }
+
+    match stage {
+        StageConfig::ToneStack(_) => match name {
+            "bass" => Ok(("bass", value.clamp(0.0, 2.0))),
+            "mid" => Ok(("mid", value.clamp(0.0, 2.0))),
+            "treble" => Ok(("treble", value.clamp(0.0, 2.0))),
+            "presence" => Ok(("presence", value.clamp(0.0, 2.0))),
+            _ => bail!("unsupported ToneStack parameter '{name}'"),
+        },
+        StageConfig::Level(_) => match name {
+            "gain" => Ok(("gain", value.clamp(0.0, 2.0))),
+            _ => bail!("unsupported Level parameter '{name}'"),
+        },
+        _ => bail!("set_stage_parameter is only supported for ToneStack and Level stages"),
     }
 }
 
@@ -516,12 +513,7 @@ pub struct AudioEffectRustortionInstance {
     prev_out_right: Vec<f32>,
     crossfade_total_frames: usize,
     crossfade_remaining_frames: usize,
-    tone_stack_stage_idx: Option<usize>,
-    live_bass: f32,
-    live_mid: f32,
-    live_treble: f32,
     input_trim_linear: f32,
-    output_trim_linear: f32,
 }
 
 impl AudioEffectRustortionInstance {
@@ -543,12 +535,7 @@ impl AudioEffectRustortionInstance {
             prev_out_right: Vec::new(),
             crossfade_total_frames: 0,
             crossfade_remaining_frames: 0,
-            tone_stack_stage_idx: None,
-            live_bass: 1.0,
-            live_mid: 1.0,
-            live_treble: 1.0,
             input_trim_linear: 1.0,
-            output_trim_linear: 1.0,
         }
     }
 
@@ -563,7 +550,6 @@ impl AudioEffectRustortionInstance {
             self.crossfade_total_frames = 0;
             self.crossfade_remaining_frames = 0;
             self.applied_generation = 0;
-            self.tone_stack_stage_idx = None;
         }
 
         if let Some(left) = &mut self.left {
@@ -594,7 +580,6 @@ impl AudioEffectRustortionInstance {
         }
 
         let config = self.shared.load();
-        self.tone_stack_stage_idx = config.first_tonestack_stage_index();
 
         let mut next_left = ChannelRuntime::new(self.sample_rate, frame_count.max(DEFAULT_BUFFER_FRAMES))?;
         let mut next_right = ChannelRuntime::new(self.sample_rate, frame_count.max(DEFAULT_BUFFER_FRAMES))?;
@@ -622,37 +607,34 @@ impl AudioEffectRustortionInstance {
     }
 
     fn smooth_value(current: f32, target: f32) -> f32 {
-        current + (target - current) * LIVE_PARAM_SMOOTHING
+        current + (target - current) * INPUT_TRIM_SMOOTHING
     }
 
-    fn apply_live_runtime_controls(&mut self) {
-        let (target_bass, target_mid, target_treble) = self.shared.live_tonestack();
-        self.live_bass = Self::smooth_value(self.live_bass, target_bass);
-        self.live_mid = Self::smooth_value(self.live_mid, target_mid);
-        self.live_treble = Self::smooth_value(self.live_treble, target_treble);
+    fn apply_input_trim(&mut self) {
+        let target_input_trim_linear = db_to_linear(self.shared.input_trim_db());
+        self.input_trim_linear = Self::smooth_value(self.input_trim_linear, target_input_trim_linear);
+    }
 
-        if let Some(stage_idx) = self.tone_stack_stage_idx {
-            if let Some(left) = &self.left {
-                left.handle.set_parameter(stage_idx, "bass", self.live_bass);
-                left.handle.set_parameter(stage_idx, "mid", self.live_mid);
-                left.handle.set_parameter(stage_idx, "treble", self.live_treble);
-            }
-            if let Some(right) = &self.right {
-                right.handle.set_parameter(stage_idx, "bass", self.live_bass);
-                right.handle.set_parameter(stage_idx, "mid", self.live_mid);
-                right.handle.set_parameter(stage_idx, "treble", self.live_treble);
-            }
+    fn apply_pending_param_updates(&mut self) {
+        let updates = self.shared.take_param_updates();
+        if updates.is_empty() {
+            return;
         }
 
-        let target_input_trim_linear = db_to_linear(self.shared.input_trim_db());
-        let target_output_trim_linear = db_to_linear(self.shared.output_trim_db());
-        self.input_trim_linear = Self::smooth_value(self.input_trim_linear, target_input_trim_linear);
-        self.output_trim_linear = Self::smooth_value(self.output_trim_linear, target_output_trim_linear);
+        for update in updates {
+            if let Some(left) = &self.left {
+                left.handle.set_parameter(update.stage_idx, update.name, update.value);
+            }
+            if let Some(right) = &self.right {
+                right.handle.set_parameter(update.stage_idx, update.name, update.value);
+            }
+        }
     }
 
     fn process_frames(&mut self, src: &[AudioFrame], dst: &mut [AudioFrame]) -> Result<()> {
         self.ensure_runtime(src.len())?;
-        self.apply_live_runtime_controls();
+        self.apply_pending_param_updates();
+        self.apply_input_trim();
 
         let mut input_peak_linear = 0.0f32;
 
@@ -693,9 +675,6 @@ impl AudioEffectRustortionInstance {
                 frame.left = self.out_left[index];
                 frame.right = self.out_right[index];
             }
-
-            frame.left *= self.output_trim_linear;
-            frame.right *= self.output_trim_linear;
 
             let frame_peak = frame.left.abs().max(frame.right.abs());
             if frame_peak > output_peak_linear {

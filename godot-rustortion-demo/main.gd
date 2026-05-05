@@ -14,10 +14,11 @@ const OUTPUT_GAIN_MAX_DB := 18.0
 const TONE_MIN := 0.2
 const TONE_MAX := 2.2
 
-@onready var rustortion_effect: AudioEffectRustortion = _resolve_rustortion_effect()
-var rustortion_bus_idx := -1
-var mic_bus_idx := -1
-var play_bus_idx := -1
+@onready var mic_bus_idx := AudioServer.get_bus_index(MIC_BUS_NAME)
+@onready var play_bus_idx := AudioServer.get_bus_index(PLAY_BUS_NAME)
+@onready var rustortion_bus_idx := AudioServer.get_bus_index(RUSTORTION_BUS_NAME)
+@onready var rustortion_effect_idx := _lookup_rustortion_effect_index_once(rustortion_bus_idx)
+@onready var rustortion_effect: AudioEffectRustortion = AudioServer.get_bus_effect(rustortion_bus_idx, rustortion_effect_idx) as AudioEffectRustortion
 var active_rig_name := ""
 
 var rigs: Array = []
@@ -29,7 +30,7 @@ var bass_value := 5.0
 var middle_value := 5.0
 var treble_value := 5.0
 
-var active_payload: Dictionary = {}
+var amp_chain_state := AmpChainState.new()
 var input_meter_db := MIN_METER_DB
 var output_meter_db := MIN_METER_DB
 
@@ -47,18 +48,21 @@ var output_meter_db := MIN_METER_DB
 @onready var bass_knob: Control = %BassKnob
 @onready var middle_knob: Control = %MiddleKnob
 @onready var treble_knob: Control = %TrebleKnob
-@onready var input_vu_meter: Control = %InputVuMeter
-@onready var output_vu_meter: Control = %OutputVuMeter
+@onready var input_vu_meter: VuMeter = %InputVuMeter
+@onready var output_vu_meter: VuMeter = %OutputVuMeter
 
 
 func _ready() -> void:
-	setup_bus_effects()
+	assert(mic_bus_idx >= 0, "Missing audio bus: %s" % MIC_BUS_NAME)
+	assert(play_bus_idx >= 0, "Missing audio bus: %s" % PLAY_BUS_NAME)
+	assert(rustortion_bus_idx >= 0, "Missing audio bus: %s" % RUSTORTION_BUS_NAME)
+	assert(rustortion_effect_idx >= 0, "Missing Rustortion effect on bus %s" % RUSTORTION_BUS_NAME)
+	assert(rustortion_effect != null, "Rustortion effect on bus %s is not AudioEffectRustortion" % RUSTORTION_BUS_NAME)
 	load_rigs()
 	load_playback_stream_list()
 	setup_playback_controls()
 	populate_rig_list()
 	apply_default_selection()
-	set_source_bus_mute_states(true, false)
 	_set_input_source_mode(true)
 	_setup_gain_knobs()
 	status_label.visible = false
@@ -74,55 +78,19 @@ func _exit_tree() -> void:
 	if mic_input_player != null and mic_input_player.playing:
 		mic_input_player.stop()
 
-	rustortion_effect = null
-	rustortion_bus_idx = -1
-	mic_bus_idx = -1
-	play_bus_idx = -1
 
-
-func setup_bus_effects() -> void:
-	mic_bus_idx = AudioServer.get_bus_index(MIC_BUS_NAME)
-	play_bus_idx = AudioServer.get_bus_index(PLAY_BUS_NAME)
-	rustortion_bus_idx = AudioServer.get_bus_index(RUSTORTION_BUS_NAME)
-
-	if rustortion_bus_idx < 0:
-		push_error("Missing audio bus: %s" % RUSTORTION_BUS_NAME)
-
-
-func _resolve_rustortion_effect() -> AudioEffectRustortion:
-	var bus_idx := AudioServer.get_bus_index(RUSTORTION_BUS_NAME)
-	if bus_idx < 0:
-		push_error("Missing audio bus: %s" % RUSTORTION_BUS_NAME)
-		return null
-
-	var effect_idx := find_rustortion_effect_index(bus_idx)
-	if effect_idx < 0:
-		push_error("Missing Rustortion effect on bus %s" % RUSTORTION_BUS_NAME)
-		return null
-
-	var effect := AudioServer.get_bus_effect(bus_idx, effect_idx) as AudioEffectRustortion
-	if effect == null:
-		push_error("Rustortion effect on bus %s is not AudioEffectRustortion" % RUSTORTION_BUS_NAME)
-	return effect
-
-
-func find_rustortion_effect_index(bus_idx: int) -> int:
+func _lookup_rustortion_effect_index_once(bus_idx: int) -> int:
 	var effect_count := AudioServer.get_bus_effect_count(bus_idx)
 	for idx in effect_count:
 		var effect := AudioServer.get_bus_effect(bus_idx, idx)
-		if effect == null:
-			continue
-		if effect.has_method("load_amp_tone_and_ir_data"):
+		if effect.has_method("set_amp_chain"):
 			return idx
 	return -1
 
 
 func set_source_bus_mute_states(mic_muted: bool, play_muted: bool) -> void:
-	if mic_bus_idx >= 0:
-		AudioServer.set_bus_mute(mic_bus_idx, mic_muted)
-
-	if play_bus_idx >= 0:
-		AudioServer.set_bus_mute(play_bus_idx, play_muted)
+	AudioServer.set_bus_mute(mic_bus_idx, mic_muted)
+	AudioServer.set_bus_mute(play_bus_idx, play_muted)
 
 
 func load_rigs() -> void:
@@ -137,9 +105,9 @@ func load_source_presets() -> void:
 		if preset.is_empty():
 			continue
 
-		var payload := translate_source_preset_to_runtime_payload(preset)
+		var payload := _build_source_payload(preset)
 		if payload.is_empty():
-			push_warning("Skipping source preset (translation failed): %s" % path)
+			push_warning("Skipping source preset (invalid payload): %s" % path)
 			continue
 
 		rigs.append({
@@ -215,72 +183,49 @@ func start_playback_current() -> bool:
 
 
 func apply_rig(index: int) -> void:
-	if rustortion_effect == null or index < 0 or index >= rigs.size():
+	if index < 0 or index >= rigs.size():
 		return
 
 	var rig: Dictionary = rigs[index]
-	var translated: Dictionary = rig.get("payload", {})
-	if translated.is_empty():
+	var payload: Dictionary = rig.get("payload", {})
+	if payload.is_empty():
 		push_error("Failed to load rig payload: %s" % rig.get("name", "Unknown"))
 		return
+	var source_preset: Dictionary = payload.get("source_preset", {})
+	if source_preset.is_empty():
+		push_error("Missing source_preset payload for rig '%s'" % rig.get("name", "Unknown"))
+		return
 
-	var ir_path := str(translated.get("ir_path", ""))
+	amp_chain_state.load_from_source_preset(source_preset)
+
+	var ir_path := str(payload.get("ir_path", ""))
 	var ir_bytes := load_bytes_file(ir_path)
 	if ir_bytes.is_empty():
 		push_error("Failed to read IR bytes: %s" % ir_path)
 		return
 
-	var ok: bool = bool(
-		rustortion_effect.load_amp_tone_and_ir_data(
-			str(translated.get("amplifier_json", "")),
-			str(translated.get("tone_json", "")),
-			str(rig.get("name", "Rig")),
-			ir_bytes,
-			float(translated.get("ir_gain", 0.1))
-		)
-	)
+	if not rustortion_effect.set_amp_chain(amp_chain_state.stages_json(), amp_chain_state.input_filters_json()):
+		push_error("Failed to apply stage chain for rig '%s': %s" % [rig.get("name", "Unknown"), _get_effect_error()])
+		return
 
-	if not ok:
+	if not rustortion_effect.set_ir_data(
+		str(rig.get("name", "Rig")),
+		ir_bytes,
+		float(payload.get("ir_gain", 0.1))
+	):
 		push_error("Failed to apply rig '%s': %s" % [rig.get("name", "Unknown"), _get_effect_error()])
 		return
 
 	active_rig_name = str(rig.get("name", ""))
-	active_payload = translated.duplicate(true)
-	_sync_knobs_from_payload(active_payload)
+	_sync_knobs_from_state()
 	_apply_input_trim_db()
-	_apply_live_runtime_controls()
+	_apply_stage_knob_controls()
 
 
-func translate_source_preset_to_runtime_payload(preset: Dictionary) -> Dictionary:
+func _build_source_payload(preset: Dictionary) -> Dictionary:
 	var stages: Array = preset.get("stages", [])
 	if stages.is_empty():
 		return {}
-
-	var preamp_chain: Array = []
-	var amp_chain: Array = []
-
-	for entry in stages:
-		if typeof(entry) != TYPE_DICTIONARY:
-			continue
-		var stage_entry: Dictionary = entry
-		for stage_name in stage_entry.keys():
-			var stage_config: Dictionary = stage_entry.get(stage_name, {})
-			if typeof(stage_config) != TYPE_DICTIONARY:
-				continue
-			if stage_name == "Preamp":
-				var preamp_cfg := stage_config.duplicate(true)
-				if not preamp_cfg.has("bypassed"):
-					preamp_cfg["bypassed"] = false
-				preamp_chain.append(preamp_cfg)
-			else:
-				amp_chain.append({stage_name: stage_config})
-
-	var input_filters: Dictionary = preset.get("input_filters", {
-		"hp_enabled": true,
-		"hp_cutoff": 100.0,
-		"lp_enabled": true,
-		"lp_cutoff": 8000.0
-	})
 
 	var ir_name := str(preset.get("ir_name", ""))
 	var ir_path := ""
@@ -293,24 +238,8 @@ func translate_source_preset_to_runtime_payload(preset: Dictionary) -> Dictionar
 	if ir_path == "":
 		ir_path = _map_cab_key_to_ir_path("Cab_GB412CMKIII_57_Edge")
 
-	var tone_preset := {
-		"schema_version": 1,
-		"name": "%s Tone" % str(preset.get("name", "Source")),
-		"preamp_chain": preamp_chain
-	}
-
-	var amp_preset := {
-		"schema_version": 1,
-		"name": "%s Amp" % str(preset.get("name", "Source")),
-		"input_filters": input_filters,
-		"amp_chain": amp_chain
-	}
-
 	return {
-		"tone_preset": tone_preset,
-		"amp_preset": amp_preset,
-		"tone_json": JSON.stringify(tone_preset),
-		"amplifier_json": JSON.stringify(amp_preset),
+		"source_preset": preset.duplicate(true),
 		"ir_path": ir_path,
 		"ir_gain": float(preset.get("ir_gain", 0.1))
 	}
@@ -325,19 +254,16 @@ func _map_cab_key_to_ir_path(cab_key: String) -> String:
 
 
 func update_vu_meters(_delta: float) -> void:
-	var input_peak_db := MIN_METER_DB
-	var output_peak_db := MIN_METER_DB
-	if rustortion_effect != null:
-		input_peak_db = float(rustortion_effect.get_input_peak_db())
-		output_peak_db = float(rustortion_effect.get_output_peak_db())
+	var input_peak_db := float(rustortion_effect.get_input_peak_db())
+	var output_peak_db := float(rustortion_effect.get_output_peak_db())
 
 	input_meter_db = _smooth_meter_db(input_meter_db, input_peak_db)
 	output_meter_db = _smooth_meter_db(output_meter_db, output_peak_db)
 
-	if input_vu_meter != null and input_vu_meter.has_method("set_peak_db"):
-		input_vu_meter.call("set_peak_db", input_meter_db)
-	if output_vu_meter != null and output_vu_meter.has_method("set_peak_db"):
-		output_vu_meter.call("set_peak_db", output_meter_db)
+	if input_vu_meter != null:
+		input_vu_meter.set_peak_db(input_meter_db)
+	if output_vu_meter != null:
+		output_vu_meter.set_peak_db(output_meter_db)
 
 func _smooth_meter_db(current_db: float, target_db: float) -> float:
 	target_db = maxf(target_db, MIN_METER_DB)
@@ -351,8 +277,8 @@ func update_status() -> void:
 	if not playback_stream_paths.is_empty():
 		playback_clip = _clip_display_name(playback_stream_paths[selected_playback_index])
 
-	var source_channels := AudioServer.get_bus_channels(play_bus_idx) if play_bus_idx >= 0 else 0
-	var process_channels := AudioServer.get_bus_channels(rustortion_bus_idx) if rustortion_bus_idx >= 0 else 0
+	var source_channels := AudioServer.get_bus_channels(play_bus_idx)
+	var process_channels := AudioServer.get_bus_channels(rustortion_bus_idx)
 	var effect_error := _get_effect_error()
 	var input_gain_db := _value_to_db(input_gain_value, INPUT_GAIN_MIN_DB, INPUT_GAIN_MAX_DB)
 	var output_gain_db := _value_to_db(output_gain_value, OUTPUT_GAIN_MIN_DB, OUTPUT_GAIN_MAX_DB)
@@ -411,7 +337,7 @@ func _setup_gain_knobs() -> void:
 			treble_knob.call("set_value", treble_value, false)
 
 	_apply_input_trim_db()
-	_apply_live_runtime_controls()
+	_apply_stage_knob_controls()
 
 
 func set_input_gain(v: float) -> void:
@@ -421,63 +347,59 @@ func set_input_gain(v: float) -> void:
 
 func set_output_gain(v: float) -> void:
 	output_gain_value = clampf(v, 0.0, 100.0)
-	_apply_live_runtime_controls()
+	_apply_stage_knob_controls()
 
 
 func set_bass(v: float) -> void:
 	bass_value = clampf(v, 0.0, 10.0)
-	_apply_live_runtime_controls()
+	_apply_stage_knob_controls()
 
 
 func set_middle(v: float) -> void:
 	middle_value = clampf(v, 0.0, 10.0)
-	_apply_live_runtime_controls()
+	_apply_stage_knob_controls()
 
 
 func set_treble(v: float) -> void:
 	treble_value = clampf(v, 0.0, 10.0)
-	_apply_live_runtime_controls()
+	_apply_stage_knob_controls()
 
 
-func _apply_live_runtime_controls() -> void:
-	if rustortion_effect == null:
-		return
+func _apply_stage_knob_controls() -> void:
 	var tone_bass := lerpf(TONE_MIN, TONE_MAX, bass_value / 10.0)
 	var tone_mid := lerpf(TONE_MIN, TONE_MAX, middle_value / 10.0)
 	var tone_treble := lerpf(TONE_MIN, TONE_MAX, treble_value / 10.0)
-	if not rustortion_effect.set_live_tonestack(tone_bass, tone_mid, tone_treble):
-		push_warning("Failed to set live ToneStack: %s" % _get_effect_error())
-	var output_trim_db := _value_to_db(output_gain_value, OUTPUT_GAIN_MIN_DB, OUTPUT_GAIN_MAX_DB)
-	rustortion_effect.set_output_trim_db(output_trim_db)
+	if not amp_chain_state.set_tonestack(tone_bass, tone_mid, tone_treble):
+		return
+
+	var output_gain_db := _value_to_db(output_gain_value, OUTPUT_GAIN_MIN_DB, OUTPUT_GAIN_MAX_DB)
+	var output_level := _db_to_level_gain(output_gain_db)
+	amp_chain_state.set_level_gain(output_level)
+
+	var tone_idx := amp_chain_state.first_tonestack_index()
+	if tone_idx >= 0:
+		if not rustortion_effect.set_stage_parameter(tone_idx, "bass", tone_bass):
+			push_warning("Failed to set ToneStack bass: %s" % _get_effect_error())
+		if not rustortion_effect.set_stage_parameter(tone_idx, "mid", tone_mid):
+			push_warning("Failed to set ToneStack mid: %s" % _get_effect_error())
+		if not rustortion_effect.set_stage_parameter(tone_idx, "treble", tone_treble):
+			push_warning("Failed to set ToneStack treble: %s" % _get_effect_error())
+
+	var level_idx := amp_chain_state.first_level_index()
+	if level_idx >= 0:
+		if not rustortion_effect.set_stage_parameter(level_idx, "gain", output_level):
+			push_warning("Failed to set Level gain: %s" % _get_effect_error())
 
 
-func _sync_knobs_from_payload(payload: Dictionary) -> void:
-	var tone_base := (payload.get("tone_preset", {}) as Dictionary).duplicate(true)
-	var amp_base := (payload.get("amp_preset", {}) as Dictionary).duplicate(true)
-	if tone_base.is_empty():
-		tone_base = _parse_json_dict(str(payload.get("tone_json", "")))
-	if amp_base.is_empty():
-		amp_base = _parse_json_dict(str(payload.get("amplifier_json", "")))
+func _sync_knobs_from_state() -> void:
+	var tone := amp_chain_state.current_tonestack_values()
+	var level_gain := amp_chain_state.current_level_gain()
 
 	input_gain_value = _db_to_value(0.0, INPUT_GAIN_MIN_DB, INPUT_GAIN_MAX_DB)
-	output_gain_value = _db_to_value(0.0, OUTPUT_GAIN_MIN_DB, OUTPUT_GAIN_MAX_DB)
-
-	if not tone_base.is_empty():
-		var preamp_chain: Array = tone_base.get("preamp_chain", [])
-		if preamp_chain.is_empty():
-			input_gain_value = _db_to_value(0.0, INPUT_GAIN_MIN_DB, INPUT_GAIN_MAX_DB)
-
-	if not amp_base.is_empty():
-		var amp_chain: Array = amp_base.get("amp_chain", [])
-		for entry in amp_chain:
-			if typeof(entry) != TYPE_DICTIONARY:
-				continue
-			var stage_entry: Dictionary = entry
-			if stage_entry.has("ToneStack"):
-				var stack: Dictionary = stage_entry.get("ToneStack", {})
-				bass_value = _tone_value_from_stack(float(stack.get("bass", 1.0)))
-				middle_value = _tone_value_from_stack(float(stack.get("mid", 1.0)))
-				treble_value = _tone_value_from_stack(float(stack.get("treble", 1.0)))
+	output_gain_value = _db_to_value(_level_gain_to_db(level_gain), OUTPUT_GAIN_MIN_DB, OUTPUT_GAIN_MAX_DB)
+	bass_value = _tone_value_from_stack(float(tone.get("bass", 1.0)))
+	middle_value = _tone_value_from_stack(float(tone.get("mid", 1.0)))
+	treble_value = _tone_value_from_stack(float(tone.get("treble", 1.0)))
 
 	_set_knob_control_value(input_gain_knob, input_gain_value)
 	_set_knob_control_value(output_gain_knob, output_gain_value)
@@ -493,14 +415,19 @@ func _set_knob_control_value(knob: Control, v: float) -> void:
 		knob.call("set_value", v, false)
 
 
-func _input_value_from_preamp_gain(gain: float) -> float:
-	var norm := clampf((gain - 1.0) / (2.4 - 1.0), 0.0, 1.0)
-	return norm * 100.0
-
-
 func _tone_value_from_stack(stack_value: float) -> float:
 	var norm := clampf((stack_value - TONE_MIN) / (TONE_MAX - TONE_MIN), 0.0, 1.0)
 	return norm * 10.0
+
+
+func _db_to_level_gain(db: float) -> float:
+	return clampf(pow(10.0, db / 20.0), 0.0, 2.0)
+
+
+func _level_gain_to_db(level_gain: float) -> float:
+	return 20.0 * log(maxf(level_gain, 0.000001)) / log(10.0)
+
+
 func _value_to_db(v: float, min_db: float, max_db: float) -> float:
 	return lerpf(min_db, max_db, clampf(v / 100.0, 0.0, 1.0))
 
@@ -509,25 +436,12 @@ func _db_to_value(gain_db: float, min_db: float, max_db: float) -> float:
 	var norm := clampf((gain_db - min_db) / (max_db - min_db), 0.0, 1.0)
 	return norm * 100.0
 func _apply_input_trim_db() -> void:
-	if rustortion_effect == null:
-		return
 	var gain_db := _value_to_db(input_gain_value, INPUT_GAIN_MIN_DB, INPUT_GAIN_MAX_DB)
 	rustortion_effect.set_input_trim_db(gain_db)
 
 
-func _parse_json_dict(json_text: String) -> Dictionary:
-	if json_text == "":
-		return {}
-	var parsed: Variant = JSON.parse_string(json_text)
-	if typeof(parsed) != TYPE_DICTIONARY:
-		return {}
-	return parsed as Dictionary
-
-
 func _get_effect_error() -> String:
-	if rustortion_effect != null:
-		return str(rustortion_effect.get_last_error())
-	return "Unknown error"
+	return str(rustortion_effect.get_last_error())
 
 
 func _clip_display_name(path: String) -> String:

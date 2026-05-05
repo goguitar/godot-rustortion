@@ -1,9 +1,9 @@
-[gd_scene load_steps=5 format=3 uid="uid://dudfqxbbnylvy"]
+[gd_scene load_steps=6 format=3 uid="uid://dudfqxbbnylvy"]
 
 [ext_resource type="Script" uid="uid://d3aksr5nkl7w3" path="res://main.gd" id="1"]
 [ext_resource type="PackedScene" uid="uid://dirl8px71jydn" path="res://ui/knob_meter.tscn" id="2"]
 [ext_resource type="PackedScene" uid="uid://n75xhtwdwijl" path="res://ui/toggle_button.tscn" id="3"]
-[ext_resource type="PackedScene" path="res://ui/vu_meter.tscn" id="4"]
+[ext_resource type="PackedScene" uid="uid://hk3jxg0ecxi2" path="res://ui/vu_meter.tscn" id="4"]
 
 [sub_resource type="AudioStreamMicrophone" id="AudioStreamMicrophone_mic"]
 
