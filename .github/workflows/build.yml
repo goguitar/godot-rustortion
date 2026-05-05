@@ -81,13 +81,9 @@ jobs:
         shell: bash
         run: |
           mkdir -p package/addons/godot_rustortion/bin
-          mkdir -p package/addons/audio_gate/bin
           cp dist/libs/libgodot_rustortion.so package/addons/godot_rustortion/bin/
           cp dist/libs/godot_rustortion.dll package/addons/godot_rustortion/bin/
           cp dist/libs/libgodot_rustortion.dylib package/addons/godot_rustortion/bin/
-          cp dist/libs/libgodot_rustortion.so package/addons/audio_gate/bin/
-          cp dist/libs/godot_rustortion.dll package/addons/audio_gate/bin/
-          cp dist/libs/libgodot_rustortion.dylib package/addons/audio_gate/bin/
 
           cat > package/addons/godot_rustortion/godot-rustortion.gdextension <<'EOF'
           [configuration]
@@ -103,27 +99,7 @@ jobs:
           macos.release = "res://addons/godot_rustortion/bin/libgodot_rustortion.dylib"
           EOF
 
-          cat > package/addons/audio_gate/audio_gate.gdextension <<'EOF'
-          [configuration]
-          entry_symbol = "gdext_rust_init"
-          compatibility_minimum = "4.5"
-
-          [libraries]
-          linux.debug.x86_64 = "res://addons/audio_gate/bin/libgodot_rustortion.so"
-          linux.release.x86_64 = "res://addons/audio_gate/bin/libgodot_rustortion.so"
-          windows.debug.x86_64 = "res://addons/audio_gate/bin/godot_rustortion.dll"
-          windows.release.x86_64 = "res://addons/audio_gate/bin/godot_rustortion.dll"
-          macos.debug = "res://addons/audio_gate/bin/libgodot_rustortion.dylib"
-          macos.release = "res://addons/audio_gate/bin/libgodot_rustortion.dylib"
-          EOF
-
           cp README.md package/addons/godot_rustortion/README.md
-          cp godot-rustortion-demo/addons/audio_gate/README.md package/addons/audio_gate/README.md
-
-          mkdir -p godot-rustortion-demo/addons/audio_gate/bin
-          cp dist/libs/libgodot_rustortion.so godot-rustortion-demo/addons/audio_gate/bin/
-          cp dist/libs/godot_rustortion.dll godot-rustortion-demo/addons/audio_gate/bin/
-          cp dist/libs/libgodot_rustortion.dylib godot-rustortion-demo/addons/audio_gate/bin/
 
       - name: Create zip artifact
         shell: bash
