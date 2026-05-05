@@ -26,7 +26,6 @@ fn linear_to_db(linear: f32) -> f32 {
     }
 }
 
-#[allow(dead_code)]
 fn db_to_linear(db: f32) -> f32 {
     10.0f32.powf(db / 20.0)
 }
@@ -271,7 +270,8 @@ impl AudioEffectGateInstance {
         let db_rms = linear_to_db(rms);
 
         let threshold_db = self.shared.threshold_db();
-        let now_below_threshold = db_rms < threshold_db;
+        let threshold_linear = db_to_linear(threshold_db);
+        let now_below_threshold = db_rms < threshold_db && rms < threshold_linear;
 
         if now_below_threshold && !self.below_threshold {
             if self.gate_state == GateState::Attack {
@@ -283,6 +283,7 @@ impl AudioEffectGateInstance {
         } else if !now_below_threshold && self.below_threshold {
             if self.gate_state == GateState::Hold {
                 self.gate_state = GateState::Open;
+                self.samples_since_below_threshold = 0;
             } else {
                 self.gate_state = GateState::Attack;
             }
@@ -311,6 +312,10 @@ impl AudioEffectGateInstance {
             GateState::Open => 1.0,
             GateState::Hold => {
                 self.samples_since_below_threshold = self.samples_since_below_threshold.saturating_add(1);
+                if self.samples_since_below_threshold == u32::MAX {
+                    self.gate_state = GateState::Release;
+                    self.samples_since_below_threshold = 0;
+                }
                 1.0
             }
             GateState::Release => {
@@ -325,6 +330,7 @@ impl AudioEffectGateInstance {
             && (1000.0 * self.samples_since_below_threshold as f32) / sample_rate >= hold_ms
         {
             self.gate_state = GateState::Release;
+            self.samples_since_below_threshold = 0;
         } else if self.gate_state == GateState::Release && next_env_value <= 0.0 {
             self.gate_state = GateState::Closed;
             next_env_value = 0.0;
