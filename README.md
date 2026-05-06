@@ -17,15 +17,26 @@ It is designed for guitar-style real-time processing with a simple data-driven A
 ## Project layout
 
 - `src/` — Godot extension implementation
-- `rustortion/` — `rustortion-core` submodule
+- `rustortion-core` — git dependency from `https://github.com/goguitar/rustortion` (branch `main`)
 - `godot-rustortion-demo/` — demo project using live input and preset lists
 
 ## Development
 
-Initialize the rustortion submodule before building:
+`rustortion-core` is fetched automatically by Cargo from GitHub on build.
+
+Build release library and copy it into the demo project:
 
 ```bash
-git submodule update --init --recursive
+cargo build --release
+cp target/release/libgodot_rustortion.so godot-rustortion-demo/addons/godot_rustortion/bin/libgodot_rustortion.so
+```
+
+Demo binaries are not committed; rebuild/copy as part of local testing.
+
+Run a headless demo bus-output smoke test:
+
+```bash
+godot --headless --path godot-rustortion-demo --script res://demo_test.gd
 ```
 
 ## Demo

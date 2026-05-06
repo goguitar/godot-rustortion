@@ -3,7 +3,7 @@ entry_symbol = "gdext_rust_init"
 compatibility_minimum = "4.5"
 
 [libraries]
-linux.debug.x86_64 = "res://libgodot_rustortion.so"
-linux.release.x86_64 = "res://libgodot_rustortion.so"
-windows.debug.x86_64 = "res://godot_rustortion.dll"
-windows.release.x86_64 = "res://godot_rustortion.dll"
+linux.debug.x86_64 = "res://addons/godot_rustortion/bin/libgodot_rustortion.so"
+linux.release.x86_64 = "res://addons/godot_rustortion/bin/libgodot_rustortion.so"
+windows.debug.x86_64 = "res://addons/godot_rustortion/bin/godot_rustortion.dll"
+windows.release.x86_64 = "res://addons/godot_rustortion/bin/godot_rustortion.dll"

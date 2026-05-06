@@ -25,7 +25,7 @@ static PREWARM_CLIPPER_TABLES: Once = Once::new();
 const DEFAULT_BUFFER_FRAMES: usize = 512;
 const MAX_IR_MS: f32 = 35.0;
 const PRESET_CROSSFADE_MS: f32 = 40.0;
-const DEFAULT_OVERSAMPLE_FACTOR: f64 = 8.0;
+const DEFAULT_OVERSAMPLE_FACTOR: f64 = 1.0;
 const METER_FLOOR_DB: f32 = -70.0;
 const INPUT_TRIM_SMOOTHING: f32 = 0.22;
 
@@ -190,11 +190,12 @@ impl ChannelRuntime {
     }
 
     fn apply_config(&self, config: &RuntimeConfig) {
+        let effective_sample_rate = self.sample_rate * DEFAULT_OVERSAMPLE_FACTOR as f32;
         let mut chain = AmplifierChain::new();
         let stages = config.stages();
 
         for stage in stages {
-            chain.add_stage(stage.to_runtime(self.sample_rate));
+            chain.add_stage(stage.to_runtime(effective_sample_rate));
         }
 
         for (index, stage) in stages.iter().enumerate() {

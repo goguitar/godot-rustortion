@@ -10,6 +10,6 @@ crate-type = ["cdylib"]
 anyhow = "1.0"
 arc-swap = "1.8"
 godot = { git = "https://github.com/godot-rust/gdext", tag = "v0.5.1", features = ["api-4-5", "experimental-threads"] }
-rustortion-core = { path = "rustortion/rustortion-core" }
+rustortion-core = { git = "https://github.com/goguitar/rustortion", branch = "main", package = "rustortion-core" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
