@@ -28,8 +28,10 @@ Build release library and copy it into the demo project:
 
 ```bash
 cargo build --release
-cp target/release/libgodot_rustortion.so godot-rustortion-demo/libgodot_rustortion.so
+cp target/release/libgodot_rustortion.so godot-rustortion-demo/addons/godot_rustortion/bin/libgodot_rustortion.so
 ```
+
+Demo binaries are not committed; rebuild/copy as part of local testing.
 
 Run a headless demo bus-output smoke test:
 

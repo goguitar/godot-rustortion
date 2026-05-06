@@ -1,3 +1,7 @@
 /target
 .godot/
 *.import
+godot-rustortion-demo/libgodot_rustortion.so
+godot-rustortion-demo/godot_rustortion.dll
+godot-rustortion-demo/addons/godot_rustortion/bin/*
+!godot-rustortion-demo/addons/godot_rustortion/bin/.gitignore
