@@ -14,8 +14,6 @@ const OUTPUT_GAIN_MIN_DB := -18.0
 const OUTPUT_GAIN_MAX_DB := 18.0
 const TONE_MIN := 0.2
 const TONE_MAX := 2.2
-const SOURCE_ACTIVE_DB := 0.0
-const SOURCE_MUTED_DB := -80.0
 
 @onready var mic_bus_idx := AudioServer.get_bus_index(MIC_BUS_NAME)
 @onready var play_bus_idx := AudioServer.get_bus_index(PLAY_BUS_NAME)
@@ -64,6 +62,8 @@ func _ready() -> void:
 	assert(rustortion_effect_idx >= 0, "Missing Rustortion effect on bus %s" % RUSTORTION_BUS_NAME)
 	assert(rustortion_effect != null, "Rustortion effect on bus %s is not AudioEffectRustortion" % RUSTORTION_BUS_NAME)
 	assert(mic_gate_effect_idx >= 0, "Missing AudioEffectGate named '%s' on bus %s" % [MIC_GATE_EFFECT_NAME, MIC_BUS_NAME])
+	AudioServer.set_bus_mute(mic_bus_idx, false)
+	AudioServer.set_bus_mute(play_bus_idx, false)
 	if not amp_chain_store.set_preset_dir(SOURCE_PRESET_DIR):
 		push_warning("Failed to set preset directory: %s" % amp_chain_store.get_last_error())
 	load_rigs()
@@ -71,8 +71,6 @@ func _ready() -> void:
 	setup_playback_controls()
 	populate_rig_list()
 	apply_default_selection()
-	AudioServer.set_bus_mute(mic_bus_idx, false)
-	AudioServer.set_bus_mute(play_bus_idx, false)
 	_set_input_source_mode(true)
 	_setup_gain_knobs()
 	status_label.visible = false
@@ -110,7 +108,7 @@ func _lookup_mic_gate_effect_index_once(bus_idx: int) -> int:
 func set_source_player_enabled(player: AudioStreamPlayer, enabled: bool) -> void:
 	if player == null:
 		return
-	player.volume_db = SOURCE_ACTIVE_DB if enabled else SOURCE_MUTED_DB
+	player.volume_linear = 1.0 if enabled else 0.0
 
 
 func load_rigs() -> void:
@@ -567,13 +565,17 @@ func _set_input_source_mode(playback_mode: bool) -> void:
 		start_playback_current()
 
 	if playback_mode:
+		if playback_input_player != null:
+			playback_input_player.stream_paused = false
 		set_source_player_enabled(mic_input_player, false)
 		set_source_player_enabled(playback_input_player, true)
 		current_input_label.text = "Current Input: Guitar dataset playback"
 		playback_clip_option.disabled = false
 	else:
+		if playback_input_player != null:
+			playback_input_player.stream_paused = true
 		set_source_player_enabled(mic_input_player, true)
-		set_source_player_enabled(playback_input_player, false)
+		set_source_player_enabled(playback_input_player, true)
 		current_input_label.text = "Current Input: System input"
 		playback_clip_option.disabled = true
 
