@@ -86,6 +86,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "assert_no_alloc"
+version = "1.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "55ca83137a482d61d916ceb1eba52a684f98004f18e0cafea230fe5579c178a3"
+
+[[package]]
 name = "autocfg"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -555,9 +561,11 @@ dependencies = [
 [[package]]
 name = "rustortion-core"
 version = "0.2.0"
+source = "git+https://github.com/goguitar/rustortion?branch=main#635b5a1f727180362bd32a04dd51d3c08bc53a77"
 dependencies = [
  "anyhow",
  "arc-swap",
+ "assert_no_alloc",
  "chrono",
  "clap",
  "crossbeam",
