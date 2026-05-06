@@ -14,6 +14,8 @@ const OUTPUT_GAIN_MIN_DB := -18.0
 const OUTPUT_GAIN_MAX_DB := 18.0
 const TONE_MIN := 0.2
 const TONE_MAX := 2.2
+const SOURCE_ACTIVE_DB := 0.0
+const SOURCE_MUTED_DB := -80.0
 
 @onready var mic_bus_idx := AudioServer.get_bus_index(MIC_BUS_NAME)
 @onready var play_bus_idx := AudioServer.get_bus_index(PLAY_BUS_NAME)
@@ -69,6 +71,8 @@ func _ready() -> void:
 	setup_playback_controls()
 	populate_rig_list()
 	apply_default_selection()
+	AudioServer.set_bus_mute(mic_bus_idx, false)
+	AudioServer.set_bus_mute(play_bus_idx, false)
 	_set_input_source_mode(true)
 	_setup_gain_knobs()
 	status_label.visible = false
@@ -103,9 +107,10 @@ func _lookup_mic_gate_effect_index_once(bus_idx: int) -> int:
 	return -1
 
 
-func set_source_bus_mute_states(mic_muted: bool, play_muted: bool) -> void:
-	AudioServer.set_bus_mute(mic_bus_idx, mic_muted)
-	AudioServer.set_bus_mute(play_bus_idx, play_muted)
+func set_source_player_enabled(player: AudioStreamPlayer, enabled: bool) -> void:
+	if player == null:
+		return
+	player.volume_db = SOURCE_ACTIVE_DB if enabled else SOURCE_MUTED_DB
 
 
 func load_rigs() -> void:
@@ -550,29 +555,25 @@ func _on_playback_input_player_finished() -> void:
 	if playback_stream_paths.is_empty():
 		return
 
-	if input_mode_button != null and input_mode_button.button_pressed:
-		return
-
 	selected_playback_index = (selected_playback_index + 1) % playback_stream_paths.size()
 	playback_clip_option.select(selected_playback_index)
 	start_playback_current()
 
 
 func _set_input_source_mode(playback_mode: bool) -> void:
+	if mic_input_player != null and not mic_input_player.playing:
+		mic_input_player.play()
+	if not playback_stream_paths.is_empty() and not playback_input_player.playing:
+		start_playback_current()
+
 	if playback_mode:
-		set_source_bus_mute_states(true, false)
-		if mic_input_player != null and mic_input_player.playing:
-			mic_input_player.stop()
-		if not playback_stream_paths.is_empty() and not playback_input_player.playing:
-			start_playback_current()
+		set_source_player_enabled(mic_input_player, false)
+		set_source_player_enabled(playback_input_player, true)
 		current_input_label.text = "Current Input: Guitar dataset playback"
 		playback_clip_option.disabled = false
 	else:
-		set_source_bus_mute_states(false, true)
-		if playback_input_player.playing:
-			playback_input_player.stop()
-		if mic_input_player != null and not mic_input_player.playing:
-			mic_input_player.play()
+		set_source_player_enabled(mic_input_player, true)
+		set_source_player_enabled(playback_input_player, false)
 		current_input_label.text = "Current Input: System input"
 		playback_clip_option.disabled = true
 
