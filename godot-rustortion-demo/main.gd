@@ -83,9 +83,10 @@ func _ready() -> void:
 	setup_playback_controls()
 	populate_rig_list()
 	apply_default_selection()
+	if rigs.is_empty():
+		_refresh_stage_flow_graph()
 	_set_input_source_mode(true)
 	_setup_gain_knobs()
-	_setup_stage_flow_graph()
 	status_label.visible = false
 
 
@@ -382,13 +383,6 @@ func _setup_gain_knobs() -> void:
 	_apply_stage_knob_controls()
 
 
-func _setup_stage_flow_graph() -> void:
-	if stage_flow_graph == null:
-		push_warning("StageFlowGraph node missing")
-		return
-	_refresh_stage_flow_graph()
-
-
 func _refresh_stage_flow_graph() -> void:
 	if stage_flow_graph == null:
 		return
@@ -396,6 +390,7 @@ func _refresh_stage_flow_graph() -> void:
 	stage_flow_graph.clear_connections()
 	for child in stage_flow_graph.get_children():
 		if child is GraphNode:
+			stage_flow_graph.remove_child(child)
 			child.queue_free()
 
 	var stage_names := _build_stage_flow_names_from_preset()
