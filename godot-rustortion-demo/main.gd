@@ -389,6 +389,8 @@ func _refresh_stage_flow_graph() -> void:
 	if stage_flow_graph == null:
 		return
 
+	stage_flow_graph.zoom = 1.0
+	stage_flow_graph.scroll_offset = Vector2.ZERO
 	stage_flow_graph.clear_connections()
 	for child in stage_flow_graph.get_children():
 		if child is GraphNode:
@@ -446,11 +448,7 @@ func _fit_stage_flow_graph_to_view() -> void:
 	var max_pos := Vector2(-INF, -INF)
 	for node in graph_nodes:
 		var node_pos := node.position_offset
-		var node_size := node.size
-		if node_size.x <= 0.0:
-			node_size.x = node.custom_minimum_size.x
-		if node_size.y <= 0.0:
-			node_size.y = node.custom_minimum_size.y
+		var node_size := node.custom_minimum_size
 		min_pos.x = minf(min_pos.x, node_pos.x)
 		min_pos.y = minf(min_pos.y, node_pos.y)
 		max_pos.x = maxf(max_pos.x, node_pos.x + node_size.x)
@@ -462,12 +460,14 @@ func _fit_stage_flow_graph_to_view() -> void:
 
 	var viewport_size := stage_flow_graph.size
 	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
+		call_deferred("_fit_stage_flow_graph_to_view")
 		return
 
 	var padding := Vector2(16.0, 16.0)
-	var fit_w := (viewport_size.x - (padding.x * 2.0)) / bounds_size.x
-	var fit_h := (viewport_size.y - (padding.y * 2.0)) / bounds_size.y
-	var zoom_target := clampf(minf(fit_w, fit_h), 0.35, 1.0)
+	var content_size := bounds_size + (padding * 2.0)
+	var fit_w := viewport_size.x / content_size.x
+	var fit_h := viewport_size.y / content_size.y
+	var zoom_target := clampf(minf(fit_w, fit_h), 0.2, 1.0)
 	stage_flow_graph.zoom = zoom_target
 
 	var visible_graph_size := viewport_size / zoom_target
