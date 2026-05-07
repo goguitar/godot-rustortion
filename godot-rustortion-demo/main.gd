@@ -402,19 +402,21 @@ func _refresh_stage_flow_graph() -> void:
 		stage_names = DEFAULT_STAGE_FLOW_STAGES.duplicate()
 
 	var stage_count := stage_names.size()
-	var node_height := 62.0
+	var node_height := 44.0
 	for idx in range(stage_count):
 		var stage_name := str(stage_names[idx])
 		var node := GraphNode.new()
 		node.name = "Stage%d" % idx
-		node.title = stage_name
+		node.title = ""
 		node.position_offset = Vector2.ZERO
-		node.custom_minimum_size = Vector2(120.0, node_height)
+		node.custom_minimum_size = Vector2(110.0, node_height)
 		node.draggable = false
 		node.selectable = false
+		node.add_theme_font_size_override("title_font_size", 8)
 
 		var label := Label.new()
 		label.text = stage_name
+		label.add_theme_font_size_override("font_size", 8)
 		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -450,19 +452,21 @@ func _layout_stage_flow_graph_nodes() -> void:
 		call_deferred("_layout_stage_flow_graph_nodes")
 		return
 
-	stage_flow_graph.zoom = 1.0
+	var graph_zoom := 0.85
+	stage_flow_graph.zoom = graph_zoom
 	stage_flow_graph.scroll_offset = Vector2.ZERO
 
 	var padding_x := 20.0
 	var padding_y := 16.0
-	var available_width := maxf(240.0, viewport_size.x - (padding_x * 2.0))
-	var node_height := 62.0
+	var graph_view_size := viewport_size / graph_zoom
+	var available_width := maxf(240.0, graph_view_size.x - (padding_x * 2.0))
+	var node_height := 44.0
 	var preferred_gap := 12.0
-	var node_width := clampf((available_width - (preferred_gap * maxf(float(stage_count - 1), 0.0))) / float(stage_count), 92.0, 152.0)
+	var node_width := clampf((available_width - (preferred_gap * maxf(float(stage_count - 1), 0.0))) / float(stage_count), 84.0, 132.0)
 	var gap := 0.0
 	if stage_count > 1:
 		gap = maxf(6.0, (available_width - (node_width * float(stage_count))) / float(stage_count - 1))
-	var y := maxf(padding_y, (viewport_size.y - node_height) * 0.5)
+	var y := maxf(padding_y, (graph_view_size.y - node_height) * 0.5)
 
 	for idx in range(stage_count):
 		var node := stage_flow_graph.get_node_or_null("Stage%d" % idx) as GraphNode
