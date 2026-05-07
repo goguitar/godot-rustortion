@@ -402,13 +402,14 @@ func _refresh_stage_flow_graph() -> void:
 		stage_names = DEFAULT_STAGE_FLOW_STAGES.duplicate()
 
 	var stage_count := stage_names.size()
+	var node_height := 62.0
 	for idx in range(stage_count):
 		var stage_name := str(stage_names[idx])
 		var node := GraphNode.new()
 		node.name = "Stage%d" % idx
 		node.title = stage_name
-		node.position_offset = Vector2(24.0 + (idx * 180.0), 22.0)
-		node.custom_minimum_size = Vector2(156.0, 62.0)
+		node.position_offset = Vector2.ZERO
+		node.custom_minimum_size = Vector2(120.0, node_height)
 		node.draggable = false
 		node.selectable = false
 
@@ -430,52 +431,49 @@ func _refresh_stage_flow_graph() -> void:
 			var to_name := StringName("Stage%d" % idx)
 			stage_flow_graph.connect_node(from_name, 0, to_name, 0)
 
-	call_deferred("_fit_stage_flow_graph_to_view")
+	call_deferred("_layout_stage_flow_graph_nodes")
 
 
-func _fit_stage_flow_graph_to_view() -> void:
+func _layout_stage_flow_graph_nodes() -> void:
 	if stage_flow_graph == null:
 		return
 
-	var graph_nodes: Array[GraphNode] = []
+	var stage_count := 0
 	for child in stage_flow_graph.get_children():
 		if child is GraphNode:
-			graph_nodes.append(child as GraphNode)
-	if graph_nodes.is_empty():
-		return
-
-	var min_pos := Vector2(INF, INF)
-	var max_pos := Vector2(-INF, -INF)
-	for node in graph_nodes:
-		var node_pos := node.position_offset
-		var node_size := node.custom_minimum_size
-		min_pos.x = minf(min_pos.x, node_pos.x)
-		min_pos.y = minf(min_pos.y, node_pos.y)
-		max_pos.x = maxf(max_pos.x, node_pos.x + node_size.x)
-		max_pos.y = maxf(max_pos.y, node_pos.y + node_size.y)
-
-	var bounds_size := max_pos - min_pos
-	if bounds_size.x <= 0.0 or bounds_size.y <= 0.0:
+			stage_count += 1
+	if stage_count == 0:
 		return
 
 	var viewport_size := stage_flow_graph.size
 	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
-		call_deferred("_fit_stage_flow_graph_to_view")
+		call_deferred("_layout_stage_flow_graph_nodes")
 		return
 
-	var padding := Vector2(16.0, 16.0)
-	var content_size := bounds_size + (padding * 2.0)
-	var fit_w := viewport_size.x / content_size.x
-	var fit_h := viewport_size.y / content_size.y
-	var zoom_target := clampf(minf(fit_w, fit_h), 0.2, 1.0)
-	stage_flow_graph.zoom = zoom_target
+	stage_flow_graph.zoom = 1.0
+	stage_flow_graph.scroll_offset = Vector2.ZERO
 
-	var visible_graph_size := viewport_size / zoom_target
-	stage_flow_graph.scroll_offset = min_pos - ((visible_graph_size - bounds_size) * 0.5)
+	var padding_x := 20.0
+	var padding_y := 16.0
+	var available_width := maxf(240.0, viewport_size.x - (padding_x * 2.0))
+	var node_height := 62.0
+	var preferred_gap := 12.0
+	var node_width := clampf((available_width - (preferred_gap * maxf(float(stage_count - 1), 0.0))) / float(stage_count), 92.0, 152.0)
+	var gap := 0.0
+	if stage_count > 1:
+		gap = maxf(6.0, (available_width - (node_width * float(stage_count))) / float(stage_count - 1))
+	var y := maxf(padding_y, (viewport_size.y - node_height) * 0.5)
+
+	for idx in range(stage_count):
+		var node := stage_flow_graph.get_node_or_null("Stage%d" % idx) as GraphNode
+		if node == null:
+			continue
+		node.custom_minimum_size = Vector2(node_width, node_height)
+		node.position_offset = Vector2(padding_x + (idx * (node_width + gap)), y)
 
 
 func _on_stage_flow_graph_resized() -> void:
-	call_deferred("_fit_stage_flow_graph_to_view")
+	call_deferred("_layout_stage_flow_graph_nodes")
 
 
 func _build_stage_flow_names_from_preset() -> Array:
