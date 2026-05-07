@@ -14,6 +14,17 @@ const OUTPUT_GAIN_MIN_DB := -18.0
 const OUTPUT_GAIN_MAX_DB := 18.0
 const TONE_MIN := 0.2
 const TONE_MAX := 2.2
+const STAGE_FLOW_STAGES := [
+	"Input",
+	"HP/LP",
+	"Compressor",
+	"TS",
+	"Pre Amplifier",
+	"Level",
+	"EQ",
+	"Cabinet",
+	"Output"
+]
 
 @onready var mic_bus_idx := AudioServer.get_bus_index(MIC_BUS_NAME)
 @onready var play_bus_idx := AudioServer.get_bus_index(PLAY_BUS_NAME)
@@ -53,6 +64,7 @@ var output_meter_db := MIN_METER_DB
 @onready var treble_knob: Control = %TrebleKnob
 @onready var input_vu_meter: VuMeter = %InputVuMeter
 @onready var output_vu_meter: VuMeter = %OutputVuMeter
+@onready var stage_flow_graph: GraphEdit = %StageFlowGraph
 
 
 func _ready() -> void:
@@ -73,6 +85,7 @@ func _ready() -> void:
 	apply_default_selection()
 	_set_input_source_mode(true)
 	_setup_gain_knobs()
+	_setup_stage_flow_graph()
 	status_label.visible = false
 
 
@@ -366,6 +379,46 @@ func _setup_gain_knobs() -> void:
 
 	_apply_input_trim_db()
 	_apply_stage_knob_controls()
+
+
+func _setup_stage_flow_graph() -> void:
+	if stage_flow_graph == null:
+		push_warning("StageFlowGraph node missing")
+		return
+
+	stage_flow_graph.clear_connections()
+	for child in stage_flow_graph.get_children():
+		if child is GraphNode:
+			child.queue_free()
+
+	var stage_count := STAGE_FLOW_STAGES.size()
+	for idx in range(stage_count):
+		var stage_name := str(STAGE_FLOW_STAGES[idx])
+		var node := GraphNode.new()
+		node.name = "Stage%d" % idx
+		node.title = stage_name
+		node.position_offset = Vector2(24.0 + (idx * 180.0), 22.0)
+		node.custom_minimum_size = Vector2(140.0, 62.0)
+		node.draggable = false
+		node.selectable = false
+
+		var label := Label.new()
+		label.text = stage_name
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		node.add_child(label)
+
+		var has_input := idx > 0
+		var has_output := idx < stage_count - 1
+		node.set_slot(0, has_input, 0, Color(0.72, 0.72, 0.72, 1.0), has_output, 0, Color(0.72, 0.72, 0.72, 1.0))
+		stage_flow_graph.add_child(node)
+
+		if idx > 0:
+			var from_name := StringName("Stage%d" % (idx - 1))
+			var to_name := StringName("Stage%d" % idx)
+			stage_flow_graph.connect_node(from_name, 0, to_name, 0)
 
 
 func set_input_gain(v: float) -> void:

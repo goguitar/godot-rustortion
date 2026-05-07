@@ -190,9 +190,29 @@ theme_override_constants/separation = 8
 [node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox/KnobsPanel/KnobsMargin/KnobsVBox"]
 custom_minimum_size = Vector2(0, 200)
 layout_mode = 2
+size_flags_horizontal = 3
 
-[node name="Label" type="Label" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox/KnobsPanel/KnobsMargin/KnobsVBox/HBoxContainer"]
+[node name="StageFlowPanel" type="PanelContainer" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox/KnobsPanel/KnobsMargin/KnobsVBox/HBoxContainer"]
 layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="StageFlowMargin" type="MarginContainer" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox/KnobsPanel/KnobsMargin/KnobsVBox/HBoxContainer/StageFlowPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 8
+
+[node name="StageFlowGraph" type="GraphEdit" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox/KnobsPanel/KnobsMargin/KnobsVBox/HBoxContainer/StageFlowPanel/StageFlowMargin"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 168)
+layout_mode = 2
+size_flags_horizontal = 3
+show_zoom_label = false
+show_menu = false
+show_grid = false
+minimap_enabled = false
+mouse_filter = 2
 
 [node name="KnobsHBox" type="HBoxContainer" parent="MarginContainer/RootLayout/CenterPanel/CenterMargin/CenterVBox/MetersPanel/MetersMargin/MetersVBox/KnobsPanel/KnobsMargin/KnobsVBox"]
 layout_mode = 2
