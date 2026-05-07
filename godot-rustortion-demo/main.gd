@@ -14,7 +14,7 @@ const OUTPUT_GAIN_MIN_DB := -18.0
 const OUTPUT_GAIN_MAX_DB := 18.0
 const TONE_MIN := 0.2
 const TONE_MAX := 2.2
-const STAGE_FLOW_STAGES := [
+const DEFAULT_STAGE_FLOW_STAGES := [
 	"Input",
 	"HP/LP",
 	"Compressor",
@@ -260,6 +260,7 @@ func apply_rig(index: int) -> void:
 	_sync_knobs_from_state()
 	_apply_input_trim_db()
 	_apply_stage_knob_controls()
+	_refresh_stage_flow_graph()
 
 
 func _build_source_payload(preset: Dictionary) -> Dictionary:
@@ -385,20 +386,30 @@ func _setup_stage_flow_graph() -> void:
 	if stage_flow_graph == null:
 		push_warning("StageFlowGraph node missing")
 		return
+	_refresh_stage_flow_graph()
+
+
+func _refresh_stage_flow_graph() -> void:
+	if stage_flow_graph == null:
+		return
 
 	stage_flow_graph.clear_connections()
 	for child in stage_flow_graph.get_children():
 		if child is GraphNode:
 			child.queue_free()
 
-	var stage_count := STAGE_FLOW_STAGES.size()
+	var stage_names := _build_stage_flow_names_from_preset()
+	if stage_names.is_empty():
+		stage_names = DEFAULT_STAGE_FLOW_STAGES.duplicate()
+
+	var stage_count := stage_names.size()
 	for idx in range(stage_count):
-		var stage_name := str(STAGE_FLOW_STAGES[idx])
+		var stage_name := str(stage_names[idx])
 		var node := GraphNode.new()
 		node.name = "Stage%d" % idx
 		node.title = stage_name
 		node.position_offset = Vector2(24.0 + (idx * 180.0), 22.0)
-		node.custom_minimum_size = Vector2(140.0, 62.0)
+		node.custom_minimum_size = Vector2(156.0, 62.0)
 		node.draggable = false
 		node.selectable = false
 
@@ -419,6 +430,48 @@ func _setup_stage_flow_graph() -> void:
 			var from_name := StringName("Stage%d" % (idx - 1))
 			var to_name := StringName("Stage%d" % idx)
 			stage_flow_graph.connect_node(from_name, 0, to_name, 0)
+
+
+func _build_stage_flow_names_from_preset() -> Array:
+	var stage_names: Array = ["Input"]
+	var filter_label := _filter_stage_label_from_state()
+	if filter_label != "":
+		stage_names.append(filter_label)
+
+	for idx in range(64):
+		var raw_name := str(amp_chain_state.stage_display_name(idx))
+		if raw_name == "":
+			break
+		stage_names.append(_display_stage_name(raw_name))
+
+	stage_names.append("Output")
+	return stage_names
+
+
+func _filter_stage_label_from_state() -> String:
+	var parsed: Variant = JSON.parse_string(str(amp_chain_state.input_filters_json()))
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return ""
+	var filters: Dictionary = parsed
+	var hp_enabled := bool(filters.get("hp_enabled", false))
+	var lp_enabled := bool(filters.get("lp_enabled", false))
+	if hp_enabled and lp_enabled:
+		return "HP/LP"
+	if hp_enabled:
+		return "HP"
+	if lp_enabled:
+		return "LP"
+	return ""
+
+
+func _display_stage_name(raw_name: String) -> String:
+	match raw_name:
+		"ToneStack":
+			return "TS"
+		"Preamp":
+			return "Pre Amplifier"
+		_:
+			return raw_name
 
 
 func set_input_gain(v: float) -> void:

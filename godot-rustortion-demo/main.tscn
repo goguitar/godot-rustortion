@@ -1,4 +1,4 @@
-[gd_scene load_steps=6 format=3 uid="uid://dudfqxbbnylvy"]
+[gd_scene load_steps=7 format=3 uid="uid://dudfqxbbnylvy"]
 
 [ext_resource type="Script" uid="uid://d3aksr5nkl7w3" path="res://main.gd" id="1"]
 [ext_resource type="PackedScene" uid="uid://dirl8px71jydn" path="res://ui/knob_meter.tscn" id="2"]
@@ -6,6 +6,18 @@
 [ext_resource type="PackedScene" uid="uid://hk3jxg0ecxi2" path="res://ui/vu_meter.tscn" id="4"]
 
 [sub_resource type="AudioStreamMicrophone" id="AudioStreamMicrophone_mic"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_stage_flow_bg"]
+bg_color = Color(0.219608, 0.137255, 0.0901961, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.34902, 0.247059, 0.180392, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
 
 [node name="Main" type="Control"]
 layout_mode = 3
@@ -208,6 +220,7 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 168)
 layout_mode = 2
 size_flags_horizontal = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_stage_flow_bg")
 show_zoom_label = false
 show_menu = false
 show_grid = false
