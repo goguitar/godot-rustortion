@@ -416,9 +416,10 @@ func _refresh_stage_flow_graph() -> void:
 
 		var label := Label.new()
 		label.text = stage_name
-		label.add_theme_font_size_override("font_size", 8)
+		label.add_theme_font_size_override("font_size", 7)
 		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		label.clip_text = true
 		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		node.add_child(label)
@@ -462,7 +463,7 @@ func _layout_stage_flow_graph_nodes() -> void:
 	var available_width := maxf(240.0, graph_view_size.x - (padding_x * 2.0))
 	var node_height := 44.0
 	var preferred_gap := 12.0
-	var node_width := clampf((available_width - (preferred_gap * maxf(float(stage_count - 1), 0.0))) / float(stage_count), 84.0, 132.0)
+	var node_width := clampf((available_width - (preferred_gap * maxf(float(stage_count - 1), 0.0))) / float(stage_count), 96.0, 132.0)
 	var gap := 0.0
 	if stage_count > 1:
 		gap = maxf(6.0, (available_width - (node_width * float(stage_count))) / float(stage_count - 1))
