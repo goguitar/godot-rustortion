@@ -85,6 +85,8 @@ func _ready() -> void:
 	apply_default_selection()
 	if rigs.is_empty():
 		_refresh_stage_flow_graph()
+	if stage_flow_graph != null and not stage_flow_graph.is_connected("resized", Callable(self, "_on_stage_flow_graph_resized")):
+		stage_flow_graph.connect("resized", Callable(self, "_on_stage_flow_graph_resized"))
 	_set_input_source_mode(true)
 	_setup_gain_knobs()
 	status_label.visible = false
@@ -425,6 +427,55 @@ func _refresh_stage_flow_graph() -> void:
 			var from_name := StringName("Stage%d" % (idx - 1))
 			var to_name := StringName("Stage%d" % idx)
 			stage_flow_graph.connect_node(from_name, 0, to_name, 0)
+
+	call_deferred("_fit_stage_flow_graph_to_view")
+
+
+func _fit_stage_flow_graph_to_view() -> void:
+	if stage_flow_graph == null:
+		return
+
+	var graph_nodes: Array[GraphNode] = []
+	for child in stage_flow_graph.get_children():
+		if child is GraphNode:
+			graph_nodes.append(child as GraphNode)
+	if graph_nodes.is_empty():
+		return
+
+	var min_pos := Vector2(INF, INF)
+	var max_pos := Vector2(-INF, -INF)
+	for node in graph_nodes:
+		var node_pos := node.position_offset
+		var node_size := node.size
+		if node_size.x <= 0.0:
+			node_size.x = node.custom_minimum_size.x
+		if node_size.y <= 0.0:
+			node_size.y = node.custom_minimum_size.y
+		min_pos.x = minf(min_pos.x, node_pos.x)
+		min_pos.y = minf(min_pos.y, node_pos.y)
+		max_pos.x = maxf(max_pos.x, node_pos.x + node_size.x)
+		max_pos.y = maxf(max_pos.y, node_pos.y + node_size.y)
+
+	var bounds_size := max_pos - min_pos
+	if bounds_size.x <= 0.0 or bounds_size.y <= 0.0:
+		return
+
+	var viewport_size := stage_flow_graph.size
+	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
+		return
+
+	var padding := Vector2(16.0, 16.0)
+	var fit_w := (viewport_size.x - (padding.x * 2.0)) / bounds_size.x
+	var fit_h := (viewport_size.y - (padding.y * 2.0)) / bounds_size.y
+	var zoom_target := clampf(minf(fit_w, fit_h), 0.35, 1.0)
+	stage_flow_graph.zoom = zoom_target
+
+	var visible_graph_size := viewport_size / zoom_target
+	stage_flow_graph.scroll_offset = min_pos - ((visible_graph_size - bounds_size) * 0.5)
+
+
+func _on_stage_flow_graph_resized() -> void:
+	call_deferred("_fit_stage_flow_graph_to_view")
 
 
 func _build_stage_flow_names_from_preset() -> Array:
