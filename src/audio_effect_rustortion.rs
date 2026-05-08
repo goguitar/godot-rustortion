@@ -22,7 +22,7 @@ use rustortion_core::ir::loader::IrLoader;
 use rustortion_core::preset::{InputFilterConfig, StageConfig};
 
 static PREWARM_CLIPPER_TABLES: Once = Once::new();
-const DEFAULT_BUFFER_FRAMES: usize = 512;
+const MIN_RUNTIME_BUFFER_FRAMES: usize = 1;
 const MAX_IR_MS: f32 = 35.0;
 const PRESET_CROSSFADE_MS: f32 = 40.0;
 const DEFAULT_OVERSAMPLE_FACTOR: f64 = 1.0;
@@ -141,6 +141,10 @@ fn linear_peak_to_db(peak_linear: f32) -> f32 {
 
 fn db_to_linear(gain_db: f32) -> f32 {
     10.0f32.powf(gain_db / 20.0)
+}
+
+fn runtime_buffer_frames(frame_count: usize) -> usize {
+    frame_count.max(MIN_RUNTIME_BUFFER_FRAMES)
 }
 
 #[derive(Clone, Default)]
@@ -544,8 +548,9 @@ impl AudioEffectRustortionInstance {
         let mix_rate = AudioServer::singleton().get_mix_rate();
         if self.left.is_none() || self.right.is_none() || (self.sample_rate - mix_rate).abs() > f32::EPSILON {
             self.sample_rate = mix_rate;
-            self.left = Some(ChannelRuntime::new(mix_rate, frame_count.max(DEFAULT_BUFFER_FRAMES))?);
-            self.right = Some(ChannelRuntime::new(mix_rate, frame_count.max(DEFAULT_BUFFER_FRAMES))?);
+            let runtime_frames = runtime_buffer_frames(frame_count);
+            self.left = Some(ChannelRuntime::new(mix_rate, runtime_frames)?);
+            self.right = Some(ChannelRuntime::new(mix_rate, runtime_frames)?);
             self.prev_left = None;
             self.prev_right = None;
             self.crossfade_total_frames = 0;
@@ -581,9 +586,9 @@ impl AudioEffectRustortionInstance {
         }
 
         let config = self.shared.load();
-
-        let mut next_left = ChannelRuntime::new(self.sample_rate, frame_count.max(DEFAULT_BUFFER_FRAMES))?;
-        let mut next_right = ChannelRuntime::new(self.sample_rate, frame_count.max(DEFAULT_BUFFER_FRAMES))?;
+        let runtime_frames = runtime_buffer_frames(frame_count);
+        let mut next_left = ChannelRuntime::new(self.sample_rate, runtime_frames)?;
+        let mut next_right = ChannelRuntime::new(self.sample_rate, runtime_frames)?;
         next_left.ensure_buffer_size(frame_count);
         next_right.ensure_buffer_size(frame_count);
         next_left.apply_config(&config);
@@ -744,4 +749,22 @@ fn decode_ir_payload(name: String, bytes: &[u8], ir_gain: f32) -> Result<IrPaylo
         gain: ir_gain,
         bytes: Arc::new(bytes.to_vec()),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::runtime_buffer_frames;
+
+    #[test]
+    fn runtime_buffer_frames_matches_callback_size() {
+        assert_eq!(runtime_buffer_frames(1), 1);
+        assert_eq!(runtime_buffer_frames(64), 64);
+        assert_eq!(runtime_buffer_frames(128), 128);
+        assert_eq!(runtime_buffer_frames(512), 512);
+    }
+
+    #[test]
+    fn runtime_buffer_frames_has_minimal_zero_frame_fallback() {
+        assert_eq!(runtime_buffer_frames(0), 1);
+    }
 }
