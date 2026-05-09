@@ -921,4 +921,22 @@ mod tests {
         let err = prepare_ir_samples_for_runtime(&[0.1, 0.2, 0.3], 48_000, 2, 48_000.0).unwrap_err();
         assert!(err.to_string().contains("not divisible by channels"));
     }
+
+    #[test]
+    fn prepare_ir_samples_rejects_empty_pcm() {
+        let err = prepare_ir_samples_for_runtime(&[], 48_000, 1, 48_000.0).unwrap_err();
+        assert!(err.to_string().contains("cannot be empty"));
+    }
+
+    #[test]
+    fn prepare_ir_samples_rejects_non_finite_values() {
+        let err = prepare_ir_samples_for_runtime(&[0.1, f32::NAN, 0.2], 48_000, 1, 48_000.0).unwrap_err();
+        assert!(err.to_string().contains("must be finite"));
+    }
+
+    #[test]
+    fn prepare_ir_samples_resamples_to_target_rate() {
+        let output = prepare_ir_samples_for_runtime(&[0.0, 1.0, 0.0, 1.0], 48_000, 1, 24_000.0).unwrap();
+        assert_eq!(output.len(), 2);
+    }
 }

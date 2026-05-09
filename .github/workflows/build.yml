@@ -8,9 +8,27 @@ on:
   workflow_dispatch:
 
 jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run tests
+        run: cargo test
+
   build-libs:
     name: Build ${{ matrix.platform }}
     runs-on: ${{ matrix.runner }}
+    needs: test
     strategy:
       fail-fast: false
       matrix:
