@@ -226,21 +226,24 @@ func apply_rig(index: int) -> void:
 	amp_chain_state.load_from_source_preset(source_preset)
 
 	var ir_path := str(payload.get("ir_path", ""))
-	var ir_bytes := load_bytes_file(ir_path)
-	if ir_bytes.is_empty():
-		push_error("Failed to read IR bytes: %s" % ir_path)
+	var ir_pcm := load_ir_wav_pcm(ir_path)
+	if ir_pcm.is_empty():
+		push_error("Failed to decode IR WAV as PCM samples: %s" % ir_path)
 		return
 
 	if not rustortion_effect.set_amp_chain(amp_chain_state.stages_json(), amp_chain_state.input_filters_json()):
 		push_error("Failed to apply stage chain for rig '%s': %s" % [rig.get("name", "Unknown"), _get_effect_error()])
 		return
 
-	if not rustortion_effect.set_ir_data(
-		str(rig.get("name", "Rig")),
-		ir_bytes,
-		float(payload.get("ir_gain", 0.1))
+	if not rustortion_effect.load_ir_samples(
+		ir_pcm.get("samples", PackedFloat32Array()),
+		int(ir_pcm.get("sample_rate", 0)),
+		int(ir_pcm.get("channels", 0))
 	):
 		push_error("Failed to apply rig '%s': %s" % [rig.get("name", "Unknown"), _get_effect_error()])
+		return
+	if not rustortion_effect.set_ir_gain(float(payload.get("ir_gain", 0.1))):
+		push_error("Failed to set IR gain for rig '%s': %s" % [rig.get("name", "Unknown"), _get_effect_error()])
 		return
 
 	active_rig_name = str(rig.get("name", ""))
@@ -529,12 +532,67 @@ func load_text_file(path: String) -> String:
 	return file.get_as_text()
 
 
-func load_bytes_file(path: String) -> PackedByteArray:
-	var file := FileAccess.open(path, FileAccess.READ)
-	if file == null:
-		push_warning("Failed to open byte file: %s" % path)
-		return PackedByteArray()
-	return file.get_buffer(file.get_length())
+func load_ir_wav_pcm(path: String) -> Dictionary:
+	var resource: Resource = load(path)
+	if resource == null:
+		push_warning("Failed to load IR resource: %s" % path)
+		return {}
+
+	var stream := resource as AudioStreamWAV
+	if stream == null:
+		push_warning("IR resource is not AudioStreamWAV: %s" % path)
+		return {}
+
+	var channels := 2 if stream.stereo else 1
+	var sample_rate := int(stream.mix_rate)
+	if sample_rate <= 0:
+		push_warning("Invalid IR sample rate (%d): %s" % [sample_rate, path])
+		return {}
+
+	var samples := decode_audio_stream_wav_pcm(stream)
+	if samples.is_empty():
+		push_warning("Decoded IR PCM buffer is empty: %s" % path)
+		return {}
+
+	if samples.size() % channels != 0:
+		push_warning("Decoded IR PCM alignment mismatch (channels=%d): %s" % [channels, path])
+		return {}
+
+	return {
+		"samples": samples,
+		"sample_rate": sample_rate,
+		"channels": channels
+	}
+
+
+func decode_audio_stream_wav_pcm(stream: AudioStreamWAV) -> PackedFloat32Array:
+	var raw := stream.data
+	if raw.is_empty():
+		return PackedFloat32Array()
+
+	var decoded := PackedFloat32Array()
+	match stream.format:
+		AudioStreamWAV.FORMAT_8_BITS:
+			decoded.resize(raw.size())
+			for i in range(raw.size()):
+				decoded[i] = (float(raw[i]) - 128.0) / 128.0
+		AudioStreamWAV.FORMAT_16_BITS:
+			var usable_bytes := raw.size() - (raw.size() % 2)
+			if usable_bytes <= 0:
+				return PackedFloat32Array()
+			if usable_bytes != raw.size():
+				push_warning("Ignoring trailing 16-bit IR byte (invalid length)")
+			decoded.resize(usable_bytes / 2)
+			var out_idx := 0
+			for i in range(0, usable_bytes, 2):
+				var value := int(raw[i]) | (int(raw[i + 1]) << 8)
+				if value >= 32768:
+					value -= 65536
+				decoded[out_idx] = float(value) / 32768.0
+				out_idx += 1
+		_:
+			push_warning("Unsupported AudioStreamWAV format for IR PCM decode: %s" % str(stream.format))
+	return decoded
 
 
 func _on_rig_list_item_selected(index: int) -> void:

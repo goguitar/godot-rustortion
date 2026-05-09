@@ -3,16 +3,36 @@
 `AudioEffectRustortion` is a Godot 4.5 GDExtension audio effect written in Rust.
 
 It is designed for guitar-style real-time processing with a simple data-driven API:
-- the game loads preset JSON and IR WAV bytes
-- the addon receives parsed tone/amp JSON strings and IR byte buffers
+- the game loads preset JSON and IR WAV resources
+- the game decodes IR WAV resources to float PCM samples
+- the addon receives parsed tone/amp JSON strings and decoded PCM buffers
 - processing runs in Rust on the audio thread
 
 ## What it does
 
 - Applies tone preamp chains (`TonePresetV1` JSON)
 - Applies amplifier chains and input filters (`AmplifierPresetV1` JSON)
-- Applies cabinet impulse responses from WAV bytes
+- Applies cabinet impulse responses from decoded PCM samples
 - Crossfades runtime config updates to avoid preset-switch clicks
+
+## IR PCM loading API
+
+`AudioEffectRustortion` supports decoded PCM IR loading from Godot:
+
+```gdscript
+rustortion_effect.load_ir_samples(samples, sample_rate, channels)
+```
+
+- `samples`: `PackedFloat32Array` PCM data
+- `sample_rate`: source sample rate in Hz
+- `channels`: `1` (mono) or `2` (stereo interleaved)
+
+Expected sample layout:
+
+- mono: `[s0, s1, s2, ...]`
+- stereo interleaved: `[L0, R0, L1, R1, ...]`
+
+The Rust DSP side consumes this PCM data directly, downmixes stereo IR to mono, resamples to the mix rate when needed, and rebuilds the convolver kernel.
 
 ## Project layout
 
