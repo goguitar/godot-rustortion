@@ -18,7 +18,6 @@ use rustortion_core::amp::stages::clipper;
 use rustortion_core::amp::stages::filter::{FilterStage, FilterType};
 use rustortion_core::audio::engine::{Engine, EngineHandle, PreparedIr};
 use rustortion_core::ir::convolver::Convolver;
-use rustortion_core::ir::loader::IrLoader;
 use rustortion_core::preset::{InputFilterConfig, StageConfig};
 
 static PREWARM_CLIPPER_TABLES: Once = Once::new();
@@ -28,6 +27,7 @@ const PRESET_CROSSFADE_MS: f32 = 40.0;
 const DEFAULT_OVERSAMPLE_FACTOR: f64 = 1.0;
 const METER_FLOOR_DB: f32 = -70.0;
 const INPUT_TRIM_SMOOTHING: f32 = 0.22;
+const REQUIRED_IR_SAMPLE_RATE: i32 = 48_000;
 
 struct SharedRuntimeState {
     current: ArcSwap<RuntimeConfig>,
@@ -164,7 +164,9 @@ impl RuntimeConfig {
 struct IrPayload {
     name: String,
     gain: f32,
-    bytes: Arc<Vec<u8>>,
+    samples: Arc<Vec<f32>>,
+    sample_rate: i32,
+    channels: i32,
 }
 
 struct ChannelRuntime {
@@ -240,11 +242,11 @@ fn make_filter_stage(
 }
 
 fn build_prepared_ir(ir: &IrPayload, sample_rate: f32) -> Option<PreparedIr> {
-    let samples = match decode_ir_samples(ir.bytes.as_slice(), sample_rate) {
+    let samples = match prepare_ir_samples_for_runtime(ir.samples.as_slice(), ir.sample_rate, ir.channels) {
         Ok(samples) => samples,
         Err(err) => {
             godot_error!(
-                "AudioEffectRustortion failed to decode IR '{}' for {:.0} Hz: {err}",
+                "AudioEffectRustortion failed to prepare IR '{}' for {:.0} Hz: {err}",
                 ir.name,
                 sample_rate
             );
@@ -329,10 +331,25 @@ impl AudioEffectRustortion {
     }
 
     #[func]
-    fn set_ir_data(&mut self, ir_name: GString, ir_bytes: PackedByteArray, ir_gain: f32) -> bool {
+    fn load_ir_samples(&mut self, samples: PackedFloat32Array, sample_rate: i32, channels: i32) -> bool {
         self.apply_update(|config| {
-            let payload = decode_ir_payload(ir_name.to_string(), ir_bytes.as_slice(), ir_gain)?;
+            let ir_name = config
+                .ir
+                .as_ref()
+                .map(|ir| ir.name.clone())
+                .unwrap_or_else(|| "PCM IR".to_string());
+            let ir_gain = config.ir.as_ref().map_or(0.1, |ir| ir.gain);
+            let payload = decode_ir_pcm_payload(ir_name, samples.as_slice(), sample_rate, channels, ir_gain)?;
             config.ir = Some(payload);
+            Ok(())
+        })
+    }
+
+    #[func]
+    fn set_ir_gain(&mut self, ir_gain: f32) -> bool {
+        self.apply_update(|config| {
+            let ir = config.ir.as_mut().context("cannot set IR gain before loading an IR")?;
+            ir.gain = ir_gain;
             Ok(())
         })
     }
@@ -734,26 +751,71 @@ impl IAudioEffectInstance for AudioEffectRustortionInstance {
     }
 }
 
-fn decode_ir_samples(bytes: &[u8], sample_rate: f32) -> Result<Vec<f32>> {
-    let target_sample_rate = sample_rate.round().max(1.0) as usize;
-    let loader = IrLoader::new(std::path::Path::new("."), target_sample_rate)?;
-    Ok(loader.load_ir_from_bytes(bytes)?)
-}
-
-fn decode_ir_payload(name: String, bytes: &[u8], ir_gain: f32) -> Result<IrPayload> {
-    let mix_rate = AudioServer::singleton().get_mix_rate();
-    let _ = decode_ir_samples(bytes, mix_rate)?;
+fn decode_ir_pcm_payload(
+    name: String,
+    samples: &[f32],
+    sample_rate: i32,
+    channels: i32,
+    ir_gain: f32,
+) -> Result<IrPayload> {
+    let _ = prepare_ir_samples_for_runtime(samples, sample_rate, channels)?;
 
     Ok(IrPayload {
         name,
         gain: ir_gain,
-        bytes: Arc::new(bytes.to_vec()),
+        samples: Arc::new(samples.to_vec()),
+        sample_rate,
+        channels,
     })
+}
+
+fn prepare_ir_samples_for_runtime(
+    samples: &[f32],
+    sample_rate: i32,
+    channels: i32,
+) -> Result<Vec<f32>> {
+    if samples.is_empty() {
+        bail!("samples cannot be empty");
+    }
+    if samples.iter().any(|sample| !sample.is_finite()) {
+        bail!("samples must be finite");
+    }
+
+    let _ = usize::try_from(sample_rate).context("sample_rate must be > 0")?;
+    if sample_rate != REQUIRED_IR_SAMPLE_RATE {
+        bail!("IR sample_rate must be {REQUIRED_IR_SAMPLE_RATE} Hz");
+    }
+
+    let source_channels = usize::try_from(channels).context("channels must be > 0")?;
+    if source_channels == 0 {
+        bail!("channels must be > 0");
+    }
+    if source_channels != 1 && source_channels != 2 {
+        bail!("only mono (1) and stereo (2) channels are supported");
+    }
+    if samples.len() % source_channels != 0 {
+        bail!(
+            "sample buffer length {} is not divisible by channels {}",
+            samples.len(),
+            source_channels
+        );
+    }
+
+    let mono_samples = if source_channels == 1 {
+        samples.to_vec()
+    } else {
+        samples
+            .chunks_exact(2)
+            .map(|frame| (frame[0] + frame[1]) * 0.5)
+            .collect()
+    };
+
+    Ok(mono_samples)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::runtime_buffer_frames;
+    use super::{prepare_ir_samples_for_runtime, runtime_buffer_frames};
 
     #[test]
     fn runtime_buffer_frames_matches_callback_size() {
@@ -766,5 +828,47 @@ mod tests {
     #[test]
     fn runtime_buffer_frames_has_minimal_zero_frame_fallback() {
         assert_eq!(runtime_buffer_frames(0), 1);
+    }
+
+    #[test]
+    fn prepare_ir_samples_keeps_mono_layout() {
+        let output = prepare_ir_samples_for_runtime(&[0.2, -0.4, 0.1], 48_000, 1).unwrap();
+        assert_eq!(output, vec![0.2, -0.4, 0.1]);
+    }
+
+    #[test]
+    fn prepare_ir_samples_downmixes_stereo_interleaved() {
+        let output = prepare_ir_samples_for_runtime(&[0.8, -0.2, 0.4, 0.6], 48_000, 2).unwrap();
+        assert_eq!(output, vec![0.3, 0.5]);
+    }
+
+    #[test]
+    fn prepare_ir_samples_rejects_unsupported_channels() {
+        let err = prepare_ir_samples_for_runtime(&[0.1, 0.2, 0.3], 48_000, 3).unwrap_err();
+        assert!(err.to_string().contains("mono (1) and stereo (2)"));
+    }
+
+    #[test]
+    fn prepare_ir_samples_rejects_channel_alignment_mismatch() {
+        let err = prepare_ir_samples_for_runtime(&[0.1, 0.2, 0.3], 48_000, 2).unwrap_err();
+        assert!(err.to_string().contains("not divisible by channels"));
+    }
+
+    #[test]
+    fn prepare_ir_samples_rejects_empty_pcm() {
+        let err = prepare_ir_samples_for_runtime(&[], 48_000, 1).unwrap_err();
+        assert!(err.to_string().contains("cannot be empty"));
+    }
+
+    #[test]
+    fn prepare_ir_samples_rejects_non_finite_values() {
+        let err = prepare_ir_samples_for_runtime(&[0.1, f32::NAN, 0.2], 48_000, 1).unwrap_err();
+        assert!(err.to_string().contains("must be finite"));
+    }
+
+    #[test]
+    fn prepare_ir_samples_rejects_non_48k_rate() {
+        let err = prepare_ir_samples_for_runtime(&[0.0, 1.0, 0.0, 1.0], 44_100, 1).unwrap_err();
+        assert!(err.to_string().contains("48000 Hz"));
     }
 }
