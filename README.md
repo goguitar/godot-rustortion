@@ -32,7 +32,7 @@ Expected sample layout:
 - mono: `[s0, s1, s2, ...]`
 - stereo interleaved: `[L0, R0, L1, R1, ...]`
 
-The Rust DSP side consumes this PCM data directly, downmixes stereo IR to mono, resamples to the mix rate when needed, and rebuilds the convolver kernel.
+The Rust DSP side consumes this PCM data directly, requires IR sample rate at 48 kHz, downmixes stereo IR to mono, and rebuilds the convolver kernel.
 
 ## Project layout
 

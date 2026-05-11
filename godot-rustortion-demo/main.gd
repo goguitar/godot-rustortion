@@ -548,6 +548,9 @@ func load_ir_wav_pcm(path: String) -> Dictionary:
 	if sample_rate <= 0:
 		push_warning("Invalid IR sample rate (%d): %s" % [sample_rate, path])
 		return {}
+	if sample_rate != 48000:
+		push_error("IR WAV must be 48kHz (got %d Hz): %s" % [sample_rate, path])
+		return {}
 
 	var samples := decode_audio_stream_wav_pcm(stream)
 	if samples.is_empty():

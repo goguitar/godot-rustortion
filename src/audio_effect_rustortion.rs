@@ -18,7 +18,6 @@ use rustortion_core::amp::stages::clipper;
 use rustortion_core::amp::stages::filter::{FilterStage, FilterType};
 use rustortion_core::audio::engine::{Engine, EngineHandle, PreparedIr};
 use rustortion_core::ir::convolver::Convolver;
-use rustortion_core::ir::loader::IrLoader;
 use rustortion_core::preset::{InputFilterConfig, StageConfig};
 
 static PREWARM_CLIPPER_TABLES: Once = Once::new();
@@ -28,6 +27,7 @@ const PRESET_CROSSFADE_MS: f32 = 40.0;
 const DEFAULT_OVERSAMPLE_FACTOR: f64 = 1.0;
 const METER_FLOOR_DB: f32 = -70.0;
 const INPUT_TRIM_SMOOTHING: f32 = 0.22;
+const REQUIRED_IR_SAMPLE_RATE: i32 = 48_000;
 
 struct SharedRuntimeState {
     current: ArcSwap<RuntimeConfig>,
@@ -242,12 +242,7 @@ fn make_filter_stage(
 }
 
 fn build_prepared_ir(ir: &IrPayload, sample_rate: f32) -> Option<PreparedIr> {
-    let samples = match prepare_ir_samples_for_runtime(
-        ir.samples.as_slice(),
-        ir.sample_rate,
-        ir.channels,
-        sample_rate,
-    ) {
+    let samples = match prepare_ir_samples_for_runtime(ir.samples.as_slice(), ir.sample_rate, ir.channels) {
         Ok(samples) => samples,
         Err(err) => {
             godot_error!(
@@ -331,15 +326,6 @@ impl AudioEffectRustortion {
         self.apply_update(|config| {
             config.stages = parse_stages_json(&stages_json.to_string())?;
             config.input_filters = parse_input_filters_json(&input_filters_json.to_string())?;
-            Ok(())
-        })
-    }
-
-    #[func]
-    fn set_ir_data(&mut self, ir_name: GString, ir_bytes: PackedByteArray, ir_gain: f32) -> bool {
-        self.apply_update(|config| {
-            let payload = decode_ir_payload(ir_name.to_string(), ir_bytes.as_slice(), ir_gain)?;
-            config.ir = Some(payload);
             Ok(())
         })
     }
@@ -765,25 +751,6 @@ impl IAudioEffectInstance for AudioEffectRustortionInstance {
     }
 }
 
-fn decode_ir_samples(bytes: &[u8], sample_rate: f32) -> Result<Vec<f32>> {
-    let target_sample_rate = sample_rate.round().max(1.0) as usize;
-    let loader = IrLoader::new(std::path::Path::new("."), target_sample_rate)?;
-    Ok(loader.load_ir_from_bytes(bytes)?)
-}
-
-fn decode_ir_payload(name: String, bytes: &[u8], ir_gain: f32) -> Result<IrPayload> {
-    let mix_rate = AudioServer::singleton().get_mix_rate();
-    let samples = decode_ir_samples(bytes, mix_rate)?;
-
-    Ok(IrPayload {
-        name,
-        gain: ir_gain,
-        samples: Arc::new(samples),
-        sample_rate: mix_rate.round().max(1.0) as i32,
-        channels: 1,
-    })
-}
-
 fn decode_ir_pcm_payload(
     name: String,
     samples: &[f32],
@@ -791,8 +758,7 @@ fn decode_ir_pcm_payload(
     channels: i32,
     ir_gain: f32,
 ) -> Result<IrPayload> {
-    let mix_rate = AudioServer::singleton().get_mix_rate();
-    let _ = prepare_ir_samples_for_runtime(samples, sample_rate, channels, mix_rate)?;
+    let _ = prepare_ir_samples_for_runtime(samples, sample_rate, channels)?;
 
     Ok(IrPayload {
         name,
@@ -807,7 +773,6 @@ fn prepare_ir_samples_for_runtime(
     samples: &[f32],
     sample_rate: i32,
     channels: i32,
-    target_sample_rate: f32,
 ) -> Result<Vec<f32>> {
     if samples.is_empty() {
         bail!("samples cannot be empty");
@@ -816,9 +781,9 @@ fn prepare_ir_samples_for_runtime(
         bail!("samples must be finite");
     }
 
-    let source_rate = usize::try_from(sample_rate).context("sample_rate must be > 0")?;
-    if source_rate == 0 {
-        bail!("sample_rate must be > 0");
+    let _ = usize::try_from(sample_rate).context("sample_rate must be > 0")?;
+    if sample_rate != REQUIRED_IR_SAMPLE_RATE {
+        bail!("IR sample_rate must be {REQUIRED_IR_SAMPLE_RATE} Hz");
     }
 
     let source_channels = usize::try_from(channels).context("channels must be > 0")?;
@@ -845,39 +810,7 @@ fn prepare_ir_samples_for_runtime(
             .collect()
     };
 
-    let target_rate = target_sample_rate.round().max(1.0) as usize;
-    if target_rate == source_rate {
-        return Ok(mono_samples);
-    }
-
-    Ok(linear_resample_mono(&mono_samples, source_rate, target_rate))
-}
-
-fn linear_resample_mono(samples: &[f32], from_rate: usize, to_rate: usize) -> Vec<f32> {
-    if samples.len() <= 1 || from_rate == to_rate {
-        return samples.to_vec();
-    }
-
-    let ratio = to_rate as f64 / from_rate as f64;
-    let output_len = ((samples.len() as f64) * ratio).round().max(1.0) as usize;
-    let src_step = from_rate as f64 / to_rate as f64;
-    let mut output = Vec::with_capacity(output_len);
-
-    for output_idx in 0..output_len {
-        let src_pos = output_idx as f64 * src_step;
-        let src_index = src_pos.floor() as usize;
-        let frac = (src_pos - src_index as f64) as f32;
-
-        if src_index + 1 < samples.len() {
-            let a = samples[src_index];
-            let b = samples[src_index + 1];
-            output.push(a + (b - a) * frac);
-        } else {
-            output.push(samples[samples.len() - 1]);
-        }
-    }
-
-    output
+    Ok(mono_samples)
 }
 
 #[cfg(test)]
@@ -899,44 +832,43 @@ mod tests {
 
     #[test]
     fn prepare_ir_samples_keeps_mono_layout() {
-        let output = prepare_ir_samples_for_runtime(&[0.2, -0.4, 0.1], 48_000, 1, 48_000.0).unwrap();
+        let output = prepare_ir_samples_for_runtime(&[0.2, -0.4, 0.1], 48_000, 1).unwrap();
         assert_eq!(output, vec![0.2, -0.4, 0.1]);
     }
 
     #[test]
     fn prepare_ir_samples_downmixes_stereo_interleaved() {
-        let output =
-            prepare_ir_samples_for_runtime(&[0.8, -0.2, 0.4, 0.6], 44_100, 2, 44_100.0).unwrap();
+        let output = prepare_ir_samples_for_runtime(&[0.8, -0.2, 0.4, 0.6], 48_000, 2).unwrap();
         assert_eq!(output, vec![0.3, 0.5]);
     }
 
     #[test]
     fn prepare_ir_samples_rejects_unsupported_channels() {
-        let err = prepare_ir_samples_for_runtime(&[0.1, 0.2, 0.3], 48_000, 3, 48_000.0).unwrap_err();
+        let err = prepare_ir_samples_for_runtime(&[0.1, 0.2, 0.3], 48_000, 3).unwrap_err();
         assert!(err.to_string().contains("mono (1) and stereo (2)"));
     }
 
     #[test]
     fn prepare_ir_samples_rejects_channel_alignment_mismatch() {
-        let err = prepare_ir_samples_for_runtime(&[0.1, 0.2, 0.3], 48_000, 2, 48_000.0).unwrap_err();
+        let err = prepare_ir_samples_for_runtime(&[0.1, 0.2, 0.3], 48_000, 2).unwrap_err();
         assert!(err.to_string().contains("not divisible by channels"));
     }
 
     #[test]
     fn prepare_ir_samples_rejects_empty_pcm() {
-        let err = prepare_ir_samples_for_runtime(&[], 48_000, 1, 48_000.0).unwrap_err();
+        let err = prepare_ir_samples_for_runtime(&[], 48_000, 1).unwrap_err();
         assert!(err.to_string().contains("cannot be empty"));
     }
 
     #[test]
     fn prepare_ir_samples_rejects_non_finite_values() {
-        let err = prepare_ir_samples_for_runtime(&[0.1, f32::NAN, 0.2], 48_000, 1, 48_000.0).unwrap_err();
+        let err = prepare_ir_samples_for_runtime(&[0.1, f32::NAN, 0.2], 48_000, 1).unwrap_err();
         assert!(err.to_string().contains("must be finite"));
     }
 
     #[test]
-    fn prepare_ir_samples_resamples_to_target_rate() {
-        let output = prepare_ir_samples_for_runtime(&[0.0, 1.0, 0.0, 1.0], 48_000, 1, 24_000.0).unwrap();
-        assert_eq!(output.len(), 2);
+    fn prepare_ir_samples_rejects_non_48k_rate() {
+        let err = prepare_ir_samples_for_runtime(&[0.0, 1.0, 0.0, 1.0], 44_100, 1).unwrap_err();
+        assert!(err.to_string().contains("48000 Hz"));
     }
 }
