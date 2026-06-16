@@ -14,6 +14,17 @@ const OUTPUT_GAIN_MIN_DB := -18.0
 const OUTPUT_GAIN_MAX_DB := 18.0
 const TONE_MIN := 0.2
 const TONE_MAX := 2.2
+const DEFAULT_STAGE_FLOW_STAGES := [
+	"Input",
+	"HP/LP",
+	"Compressor",
+	"TS",
+	"Pre Amplifier",
+	"Level",
+	"EQ",
+	"Cabinet",
+	"Output"
+]
 
 @onready var mic_bus_idx := AudioServer.get_bus_index(MIC_BUS_NAME)
 @onready var play_bus_idx := AudioServer.get_bus_index(PLAY_BUS_NAME)
@@ -53,6 +64,7 @@ var output_meter_db := MIN_METER_DB
 @onready var treble_knob: Control = %TrebleKnob
 @onready var input_vu_meter: VuMeter = %InputVuMeter
 @onready var output_vu_meter: VuMeter = %OutputVuMeter
+@onready var stage_flow_graph: GraphEdit = %StageFlowGraph
 
 
 func _ready() -> void:
@@ -71,6 +83,10 @@ func _ready() -> void:
 	setup_playback_controls()
 	populate_rig_list()
 	apply_default_selection()
+	if rigs.is_empty():
+		_refresh_stage_flow_graph()
+	if stage_flow_graph != null and not stage_flow_graph.is_connected("resized", Callable(self, "_on_stage_flow_graph_resized")):
+		stage_flow_graph.connect("resized", Callable(self, "_on_stage_flow_graph_resized"))
 	_set_input_source_mode(true)
 	_setup_gain_knobs()
 	status_label.visible = false
@@ -247,6 +263,7 @@ func apply_rig(index: int) -> void:
 	_sync_knobs_from_state()
 	_apply_input_trim_db()
 	_apply_stage_knob_controls()
+	_refresh_stage_flow_graph()
 
 
 func _build_source_payload(preset: Dictionary) -> Dictionary:
@@ -366,6 +383,144 @@ func _setup_gain_knobs() -> void:
 
 	_apply_input_trim_db()
 	_apply_stage_knob_controls()
+
+
+func _refresh_stage_flow_graph() -> void:
+	if stage_flow_graph == null:
+		return
+
+	stage_flow_graph.zoom = 1.0
+	stage_flow_graph.scroll_offset = Vector2.ZERO
+	stage_flow_graph.clear_connections()
+	for child in stage_flow_graph.get_children():
+		if child is GraphNode:
+			stage_flow_graph.remove_child(child)
+			child.queue_free()
+
+	var stage_names := _build_stage_flow_names_from_preset()
+	if stage_names.is_empty():
+		stage_names = DEFAULT_STAGE_FLOW_STAGES.duplicate()
+
+	var stage_count := stage_names.size()
+	var node_height := 44.0
+	for idx in range(stage_count):
+		var stage_name := str(stage_names[idx])
+		var node := GraphNode.new()
+		node.name = "Stage%d" % idx
+		node.title = ""
+		node.position_offset = Vector2.ZERO
+		node.custom_minimum_size = Vector2(110.0, node_height)
+		node.draggable = false
+		node.selectable = false
+		node.add_theme_font_size_override("title_font_size", 8)
+
+		var label := Label.new()
+		label.text = stage_name
+		label.add_theme_font_size_override("font_size", 7)
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		label.clip_text = true
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		node.add_child(label)
+
+		var has_input := idx > 0
+		var has_output := idx < stage_count - 1
+		node.set_slot(0, has_input, 0, Color(0.72, 0.72, 0.72, 1.0), has_output, 0, Color(0.72, 0.72, 0.72, 1.0))
+		stage_flow_graph.add_child(node)
+
+		if idx > 0:
+			var from_name := StringName("Stage%d" % (idx - 1))
+			var to_name := StringName("Stage%d" % idx)
+			stage_flow_graph.connect_node(from_name, 0, to_name, 0)
+
+	call_deferred("_layout_stage_flow_graph_nodes")
+
+
+func _layout_stage_flow_graph_nodes() -> void:
+	if stage_flow_graph == null:
+		return
+
+	var stage_count := 0
+	for child in stage_flow_graph.get_children():
+		if child is GraphNode:
+			stage_count += 1
+	if stage_count == 0:
+		return
+
+	var viewport_size := stage_flow_graph.size
+	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
+		call_deferred("_layout_stage_flow_graph_nodes")
+		return
+
+	var graph_zoom := 0.85
+	stage_flow_graph.zoom = graph_zoom
+	stage_flow_graph.scroll_offset = Vector2.ZERO
+
+	var padding_x := 20.0
+	var padding_y := 16.0
+	var graph_view_size := viewport_size / graph_zoom
+	var available_width := maxf(240.0, graph_view_size.x - (padding_x * 2.0))
+	var node_height := 44.0
+	var preferred_gap := 12.0
+	var node_width := clampf((available_width - (preferred_gap * maxf(float(stage_count - 1), 0.0))) / float(stage_count), 96.0, 132.0)
+	var gap := 0.0
+	if stage_count > 1:
+		gap = maxf(6.0, (available_width - (node_width * float(stage_count))) / float(stage_count - 1))
+	var y := maxf(padding_y, (graph_view_size.y - node_height) * 0.5)
+
+	for idx in range(stage_count):
+		var node := stage_flow_graph.get_node_or_null("Stage%d" % idx) as GraphNode
+		if node == null:
+			continue
+		node.custom_minimum_size = Vector2(node_width, node_height)
+		node.position_offset = Vector2(padding_x + (idx * (node_width + gap)), y)
+
+
+func _on_stage_flow_graph_resized() -> void:
+	call_deferred("_layout_stage_flow_graph_nodes")
+
+
+func _build_stage_flow_names_from_preset() -> Array:
+	var stage_names: Array = ["Input"]
+	var filter_label := _filter_stage_label_from_state()
+	if filter_label != "":
+		stage_names.append(filter_label)
+
+	for idx in range(64):
+		var raw_name := str(amp_chain_state.stage_display_name(idx))
+		if raw_name == "":
+			break
+		stage_names.append(_display_stage_name(raw_name))
+
+	stage_names.append("Output")
+	return stage_names
+
+
+func _filter_stage_label_from_state() -> String:
+	var parsed: Variant = JSON.parse_string(str(amp_chain_state.input_filters_json()))
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return ""
+	var filters: Dictionary = parsed
+	var hp_enabled := bool(filters.get("hp_enabled", false))
+	var lp_enabled := bool(filters.get("lp_enabled", false))
+	if hp_enabled and lp_enabled:
+		return "HP/LP"
+	if hp_enabled:
+		return "HP"
+	if lp_enabled:
+		return "LP"
+	return ""
+
+
+func _display_stage_name(raw_name: String) -> String:
+	match raw_name:
+		"ToneStack":
+			return "TS"
+		"Preamp":
+			return "Pre Amplifier"
+		_:
+			return raw_name
 
 
 func set_input_gain(v: float) -> void:
